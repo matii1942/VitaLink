@@ -79,12 +79,29 @@
           <xsd:element name="recordedAt"        type="xsd:string"/>
           <xsd:element name="respirationRate"   type="xsd:int"    nillable="true"/>
           <xsd:element name="oxygenSaturation"  type="xsd:int"    nillable="true"/>
-          <!-- Spanish respiratory support codes: AIRE (room air) | CANULA (nasal cannula) | MASCARA (mask) | CPAP | VNI (NIV) | PSV -->
+          <!-- Spanish respiratory support codes: AIRE (room air) | CANULA (nasal cannula) | MASCARA (mask) | CPAP | VNI (NIV).
+            No invasive or pressure-support modes: those patients are in
+            intensive care, which is out of scope (see ADR 0002). -->
           <xsd:element name="respSupport"       type="xsd:string"/>
           <xsd:element name="systolicBP"        type="xsd:int"    nillable="true"/>
           <xsd:element name="pulse"             type="xsd:int"    nillable="true"/>
-          <!-- ACVPU: A | C | V | P | U -->
-          <xsd:element name="consciousness"     type="xsd:string"/>
+          <!--
+            Level of consciousness is recorded as a Glasgow Coma Scale, the
+            way the ward actually charts it. NEWS2 wants ACVPU instead, so
+            the consumer has to convert.
+
+            The three components are sent separately because a total alone
+            cannot be mapped: telling 'responds to voice' from 'responds to
+            pain' needs the eye-opening component, not the sum. Records
+            migrated from the previous system carry only gcsTotal, with the
+            components null — those are the ones that cannot be converted.
+
+            Ranges: eye 1-4, verbal 1-5, motor 1-6, total 3-15.
+          -->
+          <xsd:element name="gcsEye"            type="xsd:int"    nillable="true"/>
+          <xsd:element name="gcsVerbal"         type="xsd:int"    nillable="true"/>
+          <xsd:element name="gcsMotor"          type="xsd:int"    nillable="true"/>
+          <xsd:element name="gcsTotal"          type="xsd:int"    nillable="true"/>
           <!-- decimal written with a comma: 36,8 -->
           <xsd:element name="temperature"       type="xsd:string" nillable="true"/>
           <xsd:element name="recordedBy"        type="xsd:string" nillable="true"/>
