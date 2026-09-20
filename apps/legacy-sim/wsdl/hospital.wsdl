@@ -1,13 +1,17 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
 <!--
-  HospitalService 1.0 — Sistema de Informacion Hospitalaria
+  HospitalService 1.0 — Hospital Information System
 
-  Interfaz de consulta para pacientes internados en sala general.
-  Uso restringido a sistemas autorizados.
+  Read-only query interface for patients admitted to general wards.
+  Access restricted to authorised systems.
 
-  NOTA: las fechas se transmiten como cadenas en formato DD/MM/AAAA.
-  Los indicadores logicos se transmiten como 'S' / 'N'.
+  NOTE: dates are transmitted as strings in DD/MM/YYYY format.
+  Boolean flags are transmitted as 'S' / 'N'.
+
+  The simulated hospital is Argentinian, so the coded values it emits
+  (AIRE, CANULA, GUARDIA, QUIROFANO, S/N) are in Spanish. Translating a
+  legacy system's vocabulary is part of the integration work.
 -->
 
 <definitions name="HospitalService"
@@ -18,43 +22,43 @@
              xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/">
 
   <!-- ==================================================================
-       1. TYPES — las estructuras de datos, descritas en XML Schema
+       1. TYPES — the data structures, described in XML Schema
        ================================================================== -->
   <types>
     <xsd:schema targetNamespace="http://vitalink.local/hospital"
                 elementFormDefault="qualified">
 
-      <!-- ========== Paciente ========== -->
+      <!-- ========== Patient ========== -->
       <xsd:complexType name="Patient">
         <xsd:sequence>
           <xsd:element name="mrn"         type="xsd:string"/>
           <xsd:element name="nationalId"  type="xsd:string" nillable="true"/>
           <xsd:element name="familyName"  type="xsd:string"/>
           <xsd:element name="givenName"   type="xsd:string"/>
-          <!-- DD/MM/AAAA -->
+          <!-- DD/MM/YYYY -->
           <xsd:element name="birthDate"   type="xsd:string"/>
-          <!-- M | F | 1 | 2 | U -->
+          <!-- M | F | 1 | 2 | U (two codings coexist after an unfinished migration) -->
           <xsd:element name="sexCode"     type="xsd:string"/>
-          <!-- 1 = escala estandar | 2 = objetivo 88-92% -->
+          <!-- 1 = standard scale | 2 = target 88-92% (hypercapnic respiratory failure) -->
           <xsd:element name="news2Scale"  type="xsd:string" nillable="true"/>
         </xsd:sequence>
       </xsd:complexType>
 
-      <!-- ========== Internacion ========== -->
+      <!-- ========== Admission ========== -->
       <xsd:complexType name="Admission">
         <xsd:sequence>
           <xsd:element name="admissionId"    type="xsd:string"/>
           <xsd:element name="mrn"            type="xsd:string"/>
-          <!-- DD/MM/AAAA HH:MM -->
+          <!-- DD/MM/YYYY HH:MM -->
           <xsd:element name="admittedAt"     type="xsd:string"/>
           <xsd:element name="dischargedAt"   type="xsd:string" nillable="true"/>
           <xsd:element name="ward"           type="xsd:string"/>
-          <!-- URG | PROG -->
+          <!-- URG (urgent) | PROG (scheduled) -->
           <xsd:element name="admissionType"  type="xsd:string"/>
-          <!-- GUARDIA | QUIROFANO | HEMODINAMIA | DERIVACION -->
+          <!-- Spanish source codes: GUARDIA (A&E) | QUIROFANO (theatre) | HEMODINAMIA (cath lab) | DERIVACION (transfer) -->
           <xsd:element name="sourceUnit"     type="xsd:string" nillable="true"/>
           <xsd:element name="diagnosis"      type="xsd:string" nillable="true"/>
-          <!-- S | N -->
+          <!-- S (yes) | N (no) -->
           <xsd:element name="firstAdmission" type="xsd:string"/>
         </xsd:sequence>
       </xsd:complexType>
@@ -66,22 +70,22 @@
         </xsd:sequence>
       </xsd:complexType>
 
-      <!-- ========== Observacion (signos vitales) ========== -->
+      <!-- ========== Observation (vital signs) ========== -->
       <xsd:complexType name="Observation">
         <xsd:sequence>
           <xsd:element name="observationId"     type="xsd:string"/>
           <xsd:element name="admissionId"       type="xsd:string"/>
-          <!-- DD/MM/AAAA HH:MM -->
+          <!-- DD/MM/YYYY HH:MM -->
           <xsd:element name="recordedAt"        type="xsd:string"/>
           <xsd:element name="respirationRate"   type="xsd:int"    nillable="true"/>
           <xsd:element name="oxygenSaturation"  type="xsd:int"    nillable="true"/>
-          <!-- AIRE | CANULA | MASCARA | CPAP | VNI | PSV -->
+          <!-- Spanish respiratory support codes: AIRE (room air) | CANULA (nasal cannula) | MASCARA (mask) | CPAP | VNI (NIV) | PSV -->
           <xsd:element name="respSupport"       type="xsd:string"/>
           <xsd:element name="systolicBP"        type="xsd:int"    nillable="true"/>
           <xsd:element name="pulse"             type="xsd:int"    nillable="true"/>
-          <!-- A | C | V | P | U -->
+          <!-- ACVPU: A | C | V | P | U -->
           <xsd:element name="consciousness"     type="xsd:string"/>
-          <!-- decimal con coma: 36,8 -->
+          <!-- decimal written with a comma: 36,8 -->
           <xsd:element name="temperature"       type="xsd:string" nillable="true"/>
           <xsd:element name="recordedBy"        type="xsd:string" nillable="true"/>
         </xsd:sequence>
@@ -94,7 +98,7 @@
         </xsd:sequence>
       </xsd:complexType>
 
-      <!-- ========== Elementos de entrada y salida ========== -->
+      <!-- ========== Request and response elements ========== -->
       <xsd:element name="GetPatientRequest">
         <xsd:complexType>
           <xsd:sequence>
@@ -115,7 +119,7 @@
         <xsd:complexType>
           <xsd:sequence>
             <xsd:element name="ward"       type="xsd:string" nillable="true"/>
-            <!-- S = solo internaciones sin alta -->
+            <!-- S = only admissions with no discharge date -->
             <xsd:element name="activeOnly" type="xsd:string"/>
           </xsd:sequence>
         </xsd:complexType>
@@ -133,7 +137,7 @@
         <xsd:complexType>
           <xsd:sequence>
             <xsd:element name="admissionId" type="xsd:string"/>
-            <!-- DD/MM/AAAA HH:MM — opcional -->
+            <!-- DD/MM/YYYY HH:MM — optional -->
             <xsd:element name="since"       type="xsd:string" nillable="true"/>
           </xsd:sequence>
         </xsd:complexType>
@@ -151,7 +155,7 @@
   </types>
 
   <!-- ==================================================================
-       2. MESSAGE — que viaja en cada peticion y en cada respuesta
+       2. MESSAGE — what travels in each request and each response
        ================================================================== -->
   <message name="GetPatientInput">
     <part name="parameters" element="tns:GetPatientRequest"/>
@@ -175,7 +179,7 @@
   </message>
 
   <!-- ==================================================================
-       3. PORTTYPE — las operaciones disponibles
+       3. PORTTYPE — the available operations
        ================================================================== -->
   <portType name="HospitalPortType">
     <operation name="GetPatient">
@@ -193,7 +197,7 @@
   </portType>
 
   <!-- ==================================================================
-       4. BINDING — como se transmite: SOAP 1.1 sobre HTTP, document/literal
+       4. BINDING — how it travels: SOAP 1.1 over HTTP, document/literal
        ================================================================== -->
   <binding name="HospitalBinding" type="tns:HospitalPortType">
     <soap:binding style="document"
@@ -219,7 +223,7 @@
   </binding>
 
   <!-- ==================================================================
-       5. SERVICE — en que direccion escucha
+       5. SERVICE — the address it listens on
        ================================================================== -->
   <service name="HospitalService">
     <port name="HospitalPort" binding="tns:HospitalBinding">
