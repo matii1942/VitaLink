@@ -42,5 +42,11 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      - name: Test
+      - name: Test (unit)
         run: npm test
+
+      # The e2e suite boots the real Nest application and drives it over HTTP.
+      # It lives in its own Vitest config because it matches *.e2e-spec.ts,
+      # which `npm test` deliberately skips — so CI has to call it explicitly.
+      - name: Test (e2e)
+        run: npm run test:e2e
