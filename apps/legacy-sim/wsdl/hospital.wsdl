@@ -1,0 +1,230 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!--
+  HospitalService 1.0 — Sistema de Informacion Hospitalaria
+
+  Interfaz de consulta para pacientes internados en sala general.
+  Uso restringido a sistemas autorizados.
+
+  NOTA: las fechas se transmiten como cadenas en formato DD/MM/AAAA.
+  Los indicadores logicos se transmiten como 'S' / 'N'.
+-->
+
+<definitions name="HospitalService"
+             targetNamespace="http://vitalink.local/hospital"
+             xmlns="http://schemas.xmlsoap.org/wsdl/"
+             xmlns:tns="http://vitalink.local/hospital"
+             xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+             xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/">
+
+  <!-- ==================================================================
+       1. TYPES — las estructuras de datos, descritas en XML Schema
+       ================================================================== -->
+  <types>
+    <xsd:schema targetNamespace="http://vitalink.local/hospital"
+                elementFormDefault="qualified">
+
+      <!-- ========== Paciente ========== -->
+      <xsd:complexType name="Patient">
+        <xsd:sequence>
+          <xsd:element name="mrn"         type="xsd:string"/>
+          <xsd:element name="nationalId"  type="xsd:string" nillable="true"/>
+          <xsd:element name="familyName"  type="xsd:string"/>
+          <xsd:element name="givenName"   type="xsd:string"/>
+          <!-- DD/MM/AAAA -->
+          <xsd:element name="birthDate"   type="xsd:string"/>
+          <!-- M | F | 1 | 2 | U -->
+          <xsd:element name="sexCode"     type="xsd:string"/>
+          <!-- 1 = escala estandar | 2 = objetivo 88-92% -->
+          <xsd:element name="news2Scale"  type="xsd:string" nillable="true"/>
+        </xsd:sequence>
+      </xsd:complexType>
+
+      <!-- ========== Internacion ========== -->
+      <xsd:complexType name="Admission">
+        <xsd:sequence>
+          <xsd:element name="admissionId"    type="xsd:string"/>
+          <xsd:element name="mrn"            type="xsd:string"/>
+          <!-- DD/MM/AAAA HH:MM -->
+          <xsd:element name="admittedAt"     type="xsd:string"/>
+          <xsd:element name="dischargedAt"   type="xsd:string" nillable="true"/>
+          <xsd:element name="ward"           type="xsd:string"/>
+          <!-- URG | PROG -->
+          <xsd:element name="admissionType"  type="xsd:string"/>
+          <!-- GUARDIA | QUIROFANO | HEMODINAMIA | DERIVACION -->
+          <xsd:element name="sourceUnit"     type="xsd:string" nillable="true"/>
+          <xsd:element name="diagnosis"      type="xsd:string" nillable="true"/>
+          <!-- S | N -->
+          <xsd:element name="firstAdmission" type="xsd:string"/>
+        </xsd:sequence>
+      </xsd:complexType>
+
+      <xsd:complexType name="AdmissionList">
+        <xsd:sequence>
+          <xsd:element name="admission" type="tns:Admission"
+                       minOccurs="0" maxOccurs="unbounded"/>
+        </xsd:sequence>
+      </xsd:complexType>
+
+      <!-- ========== Observacion (signos vitales) ========== -->
+      <xsd:complexType name="Observation">
+        <xsd:sequence>
+          <xsd:element name="observationId"     type="xsd:string"/>
+          <xsd:element name="admissionId"       type="xsd:string"/>
+          <!-- DD/MM/AAAA HH:MM -->
+          <xsd:element name="recordedAt"        type="xsd:string"/>
+          <xsd:element name="respirationRate"   type="xsd:int"    nillable="true"/>
+          <xsd:element name="oxygenSaturation"  type="xsd:int"    nillable="true"/>
+          <!-- AIRE | CANULA | MASCARA | CPAP | VNI | PSV -->
+          <xsd:element name="respSupport"       type="xsd:string"/>
+          <xsd:element name="systolicBP"        type="xsd:int"    nillable="true"/>
+          <xsd:element name="pulse"             type="xsd:int"    nillable="true"/>
+          <!-- A | C | V | P | U -->
+          <xsd:element name="consciousness"     type="xsd:string"/>
+          <!-- decimal con coma: 36,8 -->
+          <xsd:element name="temperature"       type="xsd:string" nillable="true"/>
+          <xsd:element name="recordedBy"        type="xsd:string" nillable="true"/>
+        </xsd:sequence>
+      </xsd:complexType>
+
+      <xsd:complexType name="ObservationList">
+        <xsd:sequence>
+          <xsd:element name="observation" type="tns:Observation"
+                       minOccurs="0" maxOccurs="unbounded"/>
+        </xsd:sequence>
+      </xsd:complexType>
+
+      <!-- ========== Elementos de entrada y salida ========== -->
+      <xsd:element name="GetPatientRequest">
+        <xsd:complexType>
+          <xsd:sequence>
+            <xsd:element name="mrn" type="xsd:string"/>
+          </xsd:sequence>
+        </xsd:complexType>
+      </xsd:element>
+
+      <xsd:element name="GetPatientResponse">
+        <xsd:complexType>
+          <xsd:sequence>
+            <xsd:element name="patient" type="tns:Patient"/>
+          </xsd:sequence>
+        </xsd:complexType>
+      </xsd:element>
+
+      <xsd:element name="ListAdmissionsRequest">
+        <xsd:complexType>
+          <xsd:sequence>
+            <xsd:element name="ward"       type="xsd:string" nillable="true"/>
+            <!-- S = solo internaciones sin alta -->
+            <xsd:element name="activeOnly" type="xsd:string"/>
+          </xsd:sequence>
+        </xsd:complexType>
+      </xsd:element>
+
+      <xsd:element name="ListAdmissionsResponse">
+        <xsd:complexType>
+          <xsd:sequence>
+            <xsd:element name="admissions" type="tns:AdmissionList"/>
+          </xsd:sequence>
+        </xsd:complexType>
+      </xsd:element>
+
+      <xsd:element name="GetObservationsRequest">
+        <xsd:complexType>
+          <xsd:sequence>
+            <xsd:element name="admissionId" type="xsd:string"/>
+            <!-- DD/MM/AAAA HH:MM — opcional -->
+            <xsd:element name="since"       type="xsd:string" nillable="true"/>
+          </xsd:sequence>
+        </xsd:complexType>
+      </xsd:element>
+
+      <xsd:element name="GetObservationsResponse">
+        <xsd:complexType>
+          <xsd:sequence>
+            <xsd:element name="observations" type="tns:ObservationList"/>
+          </xsd:sequence>
+        </xsd:complexType>
+      </xsd:element>
+
+    </xsd:schema>
+  </types>
+
+  <!-- ==================================================================
+       2. MESSAGE — que viaja en cada peticion y en cada respuesta
+       ================================================================== -->
+  <message name="GetPatientInput">
+    <part name="parameters" element="tns:GetPatientRequest"/>
+  </message>
+  <message name="GetPatientOutput">
+    <part name="parameters" element="tns:GetPatientResponse"/>
+  </message>
+
+  <message name="ListAdmissionsInput">
+    <part name="parameters" element="tns:ListAdmissionsRequest"/>
+  </message>
+  <message name="ListAdmissionsOutput">
+    <part name="parameters" element="tns:ListAdmissionsResponse"/>
+  </message>
+
+  <message name="GetObservationsInput">
+    <part name="parameters" element="tns:GetObservationsRequest"/>
+  </message>
+  <message name="GetObservationsOutput">
+    <part name="parameters" element="tns:GetObservationsResponse"/>
+  </message>
+
+  <!-- ==================================================================
+       3. PORTTYPE — las operaciones disponibles
+       ================================================================== -->
+  <portType name="HospitalPortType">
+    <operation name="GetPatient">
+      <input  message="tns:GetPatientInput"/>
+      <output message="tns:GetPatientOutput"/>
+    </operation>
+    <operation name="ListAdmissions">
+      <input  message="tns:ListAdmissionsInput"/>
+      <output message="tns:ListAdmissionsOutput"/>
+    </operation>
+    <operation name="GetObservations">
+      <input  message="tns:GetObservationsInput"/>
+      <output message="tns:GetObservationsOutput"/>
+    </operation>
+  </portType>
+
+  <!-- ==================================================================
+       4. BINDING — como se transmite: SOAP 1.1 sobre HTTP, document/literal
+       ================================================================== -->
+  <binding name="HospitalBinding" type="tns:HospitalPortType">
+    <soap:binding style="document"
+                  transport="http://schemas.xmlsoap.org/soap/http"/>
+
+    <operation name="GetPatient">
+      <soap:operation soapAction="http://vitalink.local/hospital/GetPatient"/>
+      <input><soap:body use="literal"/></input>
+      <output><soap:body use="literal"/></output>
+    </operation>
+
+    <operation name="ListAdmissions">
+      <soap:operation soapAction="http://vitalink.local/hospital/ListAdmissions"/>
+      <input><soap:body use="literal"/></input>
+      <output><soap:body use="literal"/></output>
+    </operation>
+
+    <operation name="GetObservations">
+      <soap:operation soapAction="http://vitalink.local/hospital/GetObservations"/>
+      <input><soap:body use="literal"/></input>
+      <output><soap:body use="literal"/></output>
+    </operation>
+  </binding>
+
+  <!-- ==================================================================
+       5. SERVICE — en que direccion escucha
+       ================================================================== -->
+  <service name="HospitalService">
+    <port name="HospitalPort" binding="tns:HospitalBinding">
+      <soap:address location="http://localhost:8080/hospital"/>
+    </port>
+  </service>
+
+</definitions>

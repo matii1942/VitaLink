@@ -1,0 +1,15 @@
+{
+  "name": "legacy-sim",
+  "version": "1.0.0",
+  "description": "A simulated hospital information system that speaks SOAP 1.1, standing in for the legacy HIS that VitaLink integrates with.",
+  "main": "src/server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "test": "vitest run"
+  },
+  "keywords": ["soap", "wsdl", "hl7", "simulator"],
+  "author": "",
+  "license": "MIT"
+}
