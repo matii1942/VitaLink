@@ -24,7 +24,7 @@ describe('HealthController (e2e)', () => {
       .get('/health')
       .expect(200);
 
-    expect(response.body.status).toBe('okay');
+    expect(response.body.status).toBe('ok');
 
     expect(new Date(response.body.timestamp).getTime()).not.toBeNaN();
   });
