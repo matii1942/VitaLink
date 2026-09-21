@@ -17,6 +17,7 @@ reversed, a new record supersedes it and both stay.
 | [0002](0002-scope-is-general-wards.md) | Scope is general wards, not intensive care | Accepted |
 | [0003](0003-news2-scale-is-received-not-inferred.md) | The NEWS2 scale is received, never inferred | Accepted |
 | [0004](0004-consciousness-arrives-as-glasgow.md) | Consciousness arrives as Glasgow, and the conversion is lossy | Accepted |
+| [0005](0005-news2-is-implemented-as-published.md) | NEWS2 is implemented exactly as published, limitations included | Accepted |
 
 ## Template
 
