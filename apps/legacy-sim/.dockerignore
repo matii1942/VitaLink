@@ -1,0 +1,9 @@
+# node_modules is installed on the developer's machine, for that machine's
+# operating system. Copied into a Linux image it would bring Windows-built
+# binaries that cannot run there. The image installs its own with `npm ci`.
+node_modules
+
+# Not needed to run the service.
+test
+coverage
+npm-debug.log*

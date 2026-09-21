@@ -9,7 +9,19 @@
     "dev": "node --watch src/server.js",
     "test": "vitest run"
   },
-  "keywords": ["soap", "wsdl", "hl7", "simulator"],
+  "keywords": [
+    "soap",
+    "wsdl",
+    "hl7",
+    "simulator"
+  ],
   "author": "",
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "@faker-js/faker": "^10.6.0",
+    "soap": "^1.13.0"
+  },
+  "devDependencies": {
+    "vitest": "^5.0.1"
+  }
 }
