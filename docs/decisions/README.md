@@ -19,6 +19,7 @@ reversed, a new record supersedes it and both stay.
 | [0004](0004-consciousness-arrives-as-glasgow.md) | Consciousness arrives as Glasgow, and the conversion is lossy | Accepted |
 | [0005](0005-news2-is-implemented-as-published.md) | NEWS2 is implemented exactly as published, limitations included | Accepted |
 | [0006](0006-glasgow-to-acvpu-mapping.md) | How Glasgow is converted to ACVPU | Accepted |
+| [0007](0007-accepted-dependency-advisories.md) | Two dependency advisories are accepted, not force-fixed | Accepted |
 
 ## Template
 
