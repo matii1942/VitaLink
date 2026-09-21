@@ -1,0 +1,152 @@
+// VitaLink database schema.
+//
+// Primary keys are the hospital's own identifiers — MRN, admission ID,
+// observation ID — not ones generated here. Synchronising means upserting by
+// those keys, so running the same sync twice changes nothing: the operation
+// is idempotent by construction.
+//
+// Every instant is stored as timestamptz — an absolute point in time — rather
+// than Prisma's default timestamp, which holds a bare clock reading with no
+// zone. This system exists to get time zones right: the hospital sends local
+// times with no zone at all, and the normaliser turns them into UTC instants.
+// Storing those instants in a zone-less column would reintroduce, inside our
+// own database, the exact ambiguity the integration was built to remove.
+//
+// Coded values (sex, ward, respiratory support, risk) are stored as text.
+// The domain types in src/domain are the single authority on which values are
+// valid, and the normaliser enforces them before anything reaches the
+// database. Database enums would restate the same rule a second time and turn
+// every new code into a migration.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// A patient, keyed by the hospital's medical record number.
+model Patient {
+  mrn        String      @id
+  nationalId String?
+  familyName String
+  givenName  String
+  /// A calendar date with no time of day.
+  birthDate  DateTime    @db.Date
+  /// male | female | unknown
+  sex        String
+  /// 1 | 2, or null when the source never recorded it (ADR 0003).
+  news2Scale Int?
+  admissions Admission[]
+  createdAt  DateTime    @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime    @updatedAt @db.Timestamptz(3)
+}
+
+model Admission {
+  admissionId    String        @id
+  mrn            String
+  patient        Patient       @relation(fields: [mrn], references: [mrn])
+  admittedAt     DateTime      @db.Timestamptz(3)
+  /// Null while the patient is still in a bed.
+  dischargedAt   DateTime?     @db.Timestamptz(3)
+  ward           String
+  /// urgent | scheduled
+  admissionType  String
+  /// emergency | theatre | cathlab | transfer, or null when admitted from home
+  sourceUnit     String?
+  diagnosis      String?
+  firstAdmission Boolean
+  observations   Observation[]
+  createdAt      DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime      @updatedAt @db.Timestamptz(3)
+
+  @@index([mrn])
+  @@index([dischargedAt])
+}
+
+/// One round of vital signs, exactly as recorded. Raw clinical data: never
+/// modified after the fact, and never overwritten by anything derived from it.
+model Observation {
+  observationId      String    @id
+  admissionId        String
+  admission          Admission @relation(fields: [admissionId], references: [admissionId])
+  recordedAt         DateTime  @db.Timestamptz(3)
+  respirationRate    Int?
+  oxygenSaturation   Int?
+  /// room-air | cannula | mask | cpap | niv
+  respiratorySupport String
+  systolicBP         Int?
+  pulse              Int?
+  /// Components are null for records migrated with the total only (ADR 0004).
+  gcsEye             Int?
+  gcsVerbal          Int?
+  gcsMotor           Int?
+  gcsTotal           Int
+  temperature        Float?
+  recordedBy         String?
+  score              Score?
+  createdAt          DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt          DateTime  @updatedAt @db.Timestamptz(3)
+
+  @@index([admissionId, recordedAt])
+}
+
+/// The NEWS2 result for one observation. Derived data, kept apart from the
+/// raw observation so the scoring can change and history can be recomputed
+/// without ever touching what was actually recorded.
+model Score {
+  id                      String      @id @default(uuid())
+  observationId           String      @unique
+  observation             Observation @relation(fields: [observationId], references: [observationId], onDelete: Cascade)
+  /// scored | not-eligible — a deliberate non-score is recorded, not skipped.
+  status                  String
+  /// under-16, when not eligible (ADR 0005)
+  notEligibleReason       String?
+  aggregate               Int?
+  /// low | low-medium | medium | high
+  risk                    String?
+  /// True when a parameter was missing: the aggregate is a lower bound.
+  partial                 Boolean?
+  redScore                Boolean?
+  scaleUsed               Int?
+  /// recorded | assumed (ADR 0003)
+  scaleSource             String?
+  respirationRateScore    Int?
+  oxygenSaturationScore   Int?
+  supplementalOxygenScore Int?
+  systolicBPScore         Int?
+  pulseScore              Int?
+  consciousnessScore      Int?
+  temperatureScore        Int?
+  /// The parameters that could not be scored.
+  missing                 String[]
+  /// Which version of the engine produced this, so a changed algorithm can
+  /// find and recompute everything the old one scored.
+  engineVersion           String
+  computedAt              DateTime    @default(now()) @db.Timestamptz(3)
+
+  @@index([risk])
+}
+
+/// One execution of the synchronisation job. Every run writes a row whether
+/// it succeeds or fails: an integration that quietly does nothing is the most
+/// common failure in this kind of system, and the defence is making each run
+/// visible.
+model SyncRun {
+  id                   String    @id @default(uuid())
+  startedAt            DateTime  @default(now()) @db.Timestamptz(3)
+  finishedAt           DateTime? @db.Timestamptz(3)
+  /// running | succeeded | partial | failed
+  status               String
+  patientsSynced       Int       @default(0)
+  admissionsSynced     Int       @default(0)
+  observationsSynced   Int       @default(0)
+  /// Records the normaliser refused, with the field and the reason in `errors`.
+  observationsRejected Int       @default(0)
+  scoresComputed       Int       @default(0)
+  errors               Json?
+
+  @@index([startedAt])
+}

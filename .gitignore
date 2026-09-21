@@ -32,4 +32,6 @@ Thumbs.db
 desktop.ini
 
 # --- prisma ---
-prisma/generated/
+# migrations ARE committed — they are the schema's history.
+# The generated client is not: it is rebuilt from the schema by `prisma generate`.
+**/src/generated/

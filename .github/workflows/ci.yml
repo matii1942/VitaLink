@@ -40,6 +40,13 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # The Prisma client is generated code: it lives in src/generated/,
+      # which is git-ignored, so a clean checkout does not have it. It has to
+      # be rebuilt from the schema before anything that imports it can
+      # compile. Needs no database.
+      - name: Generate the Prisma client
+        run: npx prisma generate
+
       - name: Lint
         run: npm run lint
 
