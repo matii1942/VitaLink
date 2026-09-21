@@ -121,6 +121,185 @@ function ageOn(birthDate, reference) {
   return age;
 }
 
+// ---------------------------------------------------------------------------
+// Admissions
+// ---------------------------------------------------------------------------
+
+// Where a patient ends up shapes everything else about their admission, so
+// the ward is drawn first and the rest follows from it.
+const WARDS = [
+  { value: 'internal-medicine', weight: 45 },
+  { value: 'surgery', weight: 30 },
+  { value: 'cardiology', weight: 25 },
+];
+
+// Urgency is not a property of hospitals in general, it is a property of
+// wards. Surgery fills mostly from a waiting list; internal medicine fills
+// mostly from the front door.
+const URGENCY_BY_WARD = {
+  'internal-medicine': [
+    { value: 'urgent', weight: 75 },
+    { value: 'scheduled', weight: 25 },
+  ],
+  surgery: [
+    { value: 'urgent', weight: 25 },
+    { value: 'scheduled', weight: 75 },
+  ],
+  cardiology: [
+    { value: 'urgent', weight: 55 },
+    { value: 'scheduled', weight: 45 },
+  ],
+};
+
+// Free text written by a clinician at the bedside, so it is in Spanish.
+//
+// Split by admission type, because a diagnosis is not independent of how the
+// patient arrived. An elective procedure cannot be the reason someone came
+// through the emergency department, and an acute abdomen is not something a
+// waiting list schedules. Drawing from one pool per ward produced admissions
+// that read as nonsense to anyone who has worked a ward.
+const DIAGNOSES = {
+  'internal-medicine': {
+    urgent: [
+      'Neumonia adquirida en la comunidad',
+      'Insuficiencia cardiaca descompensada',
+      'Infeccion urinaria alta',
+      'Celulitis de miembro inferior',
+      'Descompensacion diabetica',
+    ],
+    scheduled: [
+      'Estudio de anemia programado',
+      'Ajuste de tratamiento anticoagulante',
+      'Transfusion programada',
+    ],
+  },
+  surgery: {
+    urgent: [
+      'Apendicitis aguda',
+      'Colecistitis aguda',
+      'Hernia inguinal complicada',
+      'Obstruccion intestinal',
+    ],
+    scheduled: [
+      'Colecistectomia laparoscopica programada',
+      'Hernioplastia inguinal programada',
+      'Eventracion de pared abdominal',
+    ],
+  },
+  cardiology: {
+    urgent: [
+      'Sindrome coronario agudo',
+      'Fibrilacion auricular de reciente comienzo',
+      'Insuficiencia cardiaca descompensada',
+    ],
+    scheduled: [
+      'Angioplastia coronaria programada',
+      'Estudio electrofisiologico programado',
+      'Implante de marcapasos programado',
+    ],
+  },
+};
+
+// A Scale 2 patient has advanced COPD. They arrive on a medical ward with a
+// respiratory problem, not for elective gallbladder surgery. Drawing their
+// ward and diagnosis from the general pool would produce records that are
+// each individually plausible and collectively absurd.
+const COPD_DIAGNOSES = [
+  'EPOC reagudizado',
+  'EPOC reagudizado con infeccion respiratoria',
+  'Insuficiencia respiratoria cronica reagudizada',
+];
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+const DISCHARGED_SHARE = 0.3;
+
+/**
+ * Builds one admission per patient.
+ *
+ * @param {Array<object>} patients
+ * @param {Date} now  reference instant; nothing here reads the clock
+ * @returns {Array<object>} clean admission records
+ */
+function generateAdmissions(patients, now) {
+  return patients.map((patient, i) => {
+    const isCopd = patient.news2Scale === 2;
+
+    const ward = isCopd
+      ? 'internal-medicine'
+      : faker.helpers.weightedArrayElement(WARDS);
+
+    const admissionType = isCopd
+      ? 'urgent'
+      : faker.helpers.weightedArrayElement(URGENCY_BY_WARD[ward]);
+
+    const admittedAt = faker.date.between({
+      from: new Date(now.getTime() - 10 * MS_PER_DAY),
+      to: new Date(now.getTime() - 1 * MS_PER_DAY),
+    });
+
+    return {
+      admissionId: `ADM-${String(i + 1).padStart(6, '0')}`,
+      mrn: patient.mrn,
+      admittedAt,
+      dischargedAt: pickDischarge(admittedAt, now),
+      ward,
+      admissionType,
+      sourceUnit: pickSourceUnit(ward, admissionType),
+      diagnosis: isCopd
+        ? faker.helpers.arrayElement(COPD_DIAGNOSES)
+        : faker.helpers.arrayElement(DIAGNOSES[ward][admissionType]),
+
+      // Advanced COPD means a history of admissions. A first admission
+      // would contradict the diagnosis.
+      firstAdmission: isCopd
+        ? false
+        : faker.datatype.boolean({ probability: 0.55 }),
+    };
+  });
+}
+
+/**
+ * Where the patient came from. This cannot be drawn independently of the
+ * admission type: a scheduled admission walks in from home and has no source
+ * unit at all, while an urgent one always came from somewhere.
+ */
+function pickSourceUnit(ward, admissionType) {
+  if (admissionType === 'urgent') {
+    return faker.helpers.weightedArrayElement([
+      { value: 'emergency', weight: 85 },
+      { value: 'transfer', weight: 15 },
+    ]);
+  }
+
+  // Scheduled: only the procedural wards have an upstream unit.
+  if (ward === 'surgery') return 'theatre';
+  if (ward === 'cardiology') {
+    return faker.helpers.weightedArrayElement([
+      { value: 'cathlab', weight: 60 },
+      { value: null, weight: 40 },
+    ]);
+  }
+
+  return null; // admitted from home
+}
+
+/**
+ * Around 30% of the ward has already gone home; the rest are still in a bed,
+ * and those are the ones ListAdmissions(activeOnly) has to return.
+ *
+ * The discharge is drawn from the interval that starts one day after
+ * admission and ends now, which is the only way to guarantee it never
+ * lands before the admission it belongs to.
+ */
+function pickDischarge(admittedAt, now) {
+  if (!faker.datatype.boolean({ probability: DISCHARGED_SHARE })) return null;
+
+  const earliest = new Date(admittedAt.getTime() + MS_PER_DAY);
+  if (earliest >= now) return null; // admitted too recently to be home yet
+
+  return faker.date.between({ from: earliest, to: now });
+}
+
 /**
  * Entry point. The seed makes the dataset reproducible: same seed, same
  * patients, every time the simulator restarts and in every test run.
@@ -129,12 +308,19 @@ function generateDataset({ patientCount = 25, seed = 42, now = startOfToday() } 
   faker.seed(seed);
 
   const patients = generatePatients(patientCount, now);
+  const admissions = generateAdmissions(patients, now);
 
   return {
     patients,
-    admissions: [], // next step
-    observations: [], // after that
+    admissions,
+    observations: [], // next step
   };
 }
 
-module.exports = { generateDataset, generatePatients, ageOn, startOfToday };
+module.exports = {
+  generateDataset,
+  generatePatients,
+  generateAdmissions,
+  ageOn,
+  startOfToday,
+};
