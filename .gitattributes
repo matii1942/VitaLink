@@ -1,0 +1,19 @@
+# Line endings.
+#
+# Every text file is stored and checked out with LF, whatever operating system
+# the contributor uses. The project runs on Linux everywhere that matters —
+# CI, the Docker images, and AWS later — so LF is the native format, and
+# fixing it here means the result no longer depends on how each person's
+# Git happens to be configured.
+* text=auto eol=lf
+
+# Windows-only scripts are the exception: cmd.exe and older PowerShell expect
+# CRLF.
+*.cmd text eol=crlf
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+
+# Binary files are never touched.
+*.png binary
+*.jpg binary
+*.pdf binary
