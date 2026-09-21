@@ -1,10 +1,8 @@
 # VitaLink CI — runs on every push to main and on every pull request.
 #
-# Sprint 0 scope: install, lint, test.
+# Two jobs, one per package, running in parallel.
 # Sprint 3 will add a PostgreSQL service container for integration tests.
 #
-# If your API does not live at apps/api, change the two `working-directory`
-# values and `cache-dependency-path` to match.
 
 name: CI
 
@@ -14,8 +12,11 @@ on:
   pull_request:
 
 jobs:
-  test:
-    name: Lint and test
+  # ---------------------------------------------------------------------
+  # VitaLink itself — the NestJS API.
+  # ---------------------------------------------------------------------
+  api:
+    name: API — lint and test
     runs-on: ubuntu-latest
 
     defaults:
@@ -50,3 +51,40 @@ jobs:
       # which `npm test` deliberately skips — so CI has to call it explicitly.
       - name: Test (e2e)
         run: npm run test:e2e
+
+  # ---------------------------------------------------------------------
+  # The simulated hospital. A separate job because it is a separate package
+  # with its own dependencies; the two run in parallel.
+  # ---------------------------------------------------------------------
+  legacy-sim:
+    name: Hospital simulator — test
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: apps/legacy-sim
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: apps/legacy-sim/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Includes a test that starts the SOAP server on a random port and
+      # calls it with a real SOAP client.
+      - name: Test
+        run: npm test
+
+      # Proves the image builds from a clean checkout — the step that would
+      # have caught the missing dependencies in package.json.
+      - name: Build the Docker image
+        working-directory: .
+        run: docker build -t vitalink-legacy-sim apps/legacy-sim

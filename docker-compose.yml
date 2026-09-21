@@ -1,8 +1,8 @@
 # VitaLink — local development services.
 # Values come from .env (copy .env.example to .env first).
 #
-#   docker compose up -d      start
-#   docker compose ps         status
+#   docker compose up -d --build   start (rebuild images after code changes)
+#   docker compose ps               status
 #   docker compose logs -f    follow logs
 #   docker compose down       stop (data survives in the named volume)
 #   docker compose down -v    stop AND delete the data
@@ -25,6 +25,25 @@ services:
       # lets other services (and you) know when Postgres is actually ready,
       # not merely started — the container accepts connections a moment later
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # The simulated hospital. Built from source rather than pulled, because it
+  # is part of this repository. In a real deployment it would not exist:
+  # VitaLink would point at the hospital's own system instead.
+  legacy-sim:
+    build: ./apps/legacy-sim
+    container_name: vitalink-legacy-sim
+    restart: unless-stopped
+    environment:
+      LEGACY_SOAP_PORT: 8080
+    ports:
+      - "${LEGACY_SOAP_PORT:-8080}:8080"
+    healthcheck:
+      # Healthy means the contract is actually being served, not merely that
+      # the process started. wget ships with the Alpine base image.
+      test: ["CMD-SHELL", "wget -qO /dev/null http://localhost:8080/hospital?wsdl || exit 1"]
       interval: 5s
       timeout: 5s
       retries: 10
