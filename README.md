@@ -1,8 +1,8 @@
-VitaLink
+# VitaLink
 
-VitaLink connects a hospital's legacy patient system to modern clinical tooling. It pulls admissions and observations from a SOAP web service, normalizes them into PostgreSQL, scores each set of vital signs against the NEWS2 early-warning standard, and exposes the result through a REST API and a ward dashboard — so that a nurse can see, at a glance, which patients deteriorated overnight.
+VitaLink connects a hospital's legacy patient system to modern clinical tooling. It pulls admissions and vital signs from a SOAP web service, normalises them into PostgreSQL, and scores every set of observations against the **NEWS2** early-warning standard — so that deterioration visible in the data is not left waiting for someone to notice it at shift change.
 
-> **Status:** Sprint 0 — foundations. This project is under active development; see the [roadmap](#roadmap) below.
+> **Status:** Sprints 0–2 complete. The integration works end to end: a sync reads every admission from the hospital, stores it, and scores every observation. The REST API for consumers, the cloud deployment and the ward dashboard are next — see the [roadmap](#roadmap).
 
 ---
 
@@ -10,83 +10,104 @@ VitaLink connects a hospital's legacy patient system to modern clinical tooling.
 
 Hospitals rarely replace their core systems. They extend them. The result is a patient record that lives in software designed twenty years ago, speaking SOAP and XML, with no practical way for anything modern to read it.
 
-The cost lands on the people at the bedside. Vital signs are recorded in one system, reviewed in another, and the connection between them is a person retyping numbers at shift change. Deterioration is usually visible in the data hours before anyone acts on it — not because staff miss it, but because nothing is watching the trend continuously while they attend to twenty other patients.
+The cost lands on the people at the bedside. Vital signs are recorded in one system, reviewed in another, and the connection between them is a person reading numbers at shift change. Deterioration is usually visible in the data hours before anyone acts on it — not because staff miss it, but because nobody is subtracting one round from the next across twenty patients and three shifts. Each nurse sees a number that, on its own, is tolerable. The trend is what matters, and the trend is what gets lost.
 
-VitaLink does not replace the legacy system. It reads from it, scores what it finds against a published clinical standard, and surfaces the patients who need attention first.
+VitaLink does not replace the legacy system. It reads from it, scores what it finds against a published clinical standard, and records the result.
 
-## What it does
+## What works today
 
-- Pulls patients, admissions and observations from a legacy SOAP service on an hourly schedule
-- Normalizes inconsistent legacy formats — string dates, nullable fields, non-standard sex codes — into a typed relational model
-- Scores every set of vital signs against **NEWS2**, storing the aggregate score and the per-parameter breakdown
-- Raises alerts when a score crosses the escalation thresholds, or when any single parameter hits its maximum
-- Records every synchronization run, so a failed or partial import is visible instead of silent
-- Exposes patients, admissions, observations, scores and alerts through a documented REST API
-- Presents a ward view showing current risk and how it has moved over the last 24 hours
+- **A simulated hospital information system** that speaks SOAP 1.1 from a hand-written WSDL, serving reproducible synthetic patients whose vital signs evolve over their stay — most stable or recovering, some deteriorating the way real patients do.
+- **A SOAP client** that takes its endpoint from configuration rather than the WSDL, and classifies failures: a client fault is never retried, a server fault or a dropped connection is.
+- **A normaliser** that turns the legacy format into a typed clinical model — local times with no zone into UTC instants, `'36,8'` into `36.8`, `'S'`/`'N'` into booleans, Spanish codes into English values, two coexisting sex codings into one. An absent value becomes `null`; a malformed one is refused and named, never guessed.
+- **A NEWS2 engine** transcribed from the Royal College of Physicians chart and verified row by row against independent sources, with a test on both sides of every band boundary.
+- **A synchronisation job** that stores everything the hospital sends and scores every observation. Every write is keyed by the hospital's own identifier, so running it twice changes nothing. Every run is recorded, whether it succeeds or not.
+
+Verified end to end on 22 September 2026: a sync of the simulator's 25 patients stores 478 observations and scores all 478, with nothing rejected. Six consecutive runs leave the same 478 rows.
 
 ## Architecture
 
 ```
-┌──────────────────────┐        SOAP 1.1 / XML          ┌─────────────────────┐
-│  legacy-sim service  │ ◄───────────────────────────── │   sync worker       │
-│  (Node + soap + WSDL)│   GetPatient, ListAdmissions,  │   (Lambda, hourly)  │
-│  simulates the       │   GetObservations              │                     │
-│  hospital's old HIS  │ ─────────────────────────────► │   parses, validates │
-└──────────────────────┘                                └──────────┬──────────┘
-                                                                   │ Prisma
-                                                                   ▼
-┌──────────────────────┐         REST / JSON            ┌─────────────────────┐
-│   React dashboard    │ ◄───────────────────────────── │   NestJS API        │
-│   (Vite + TS)        │   /patients /admissions        │   + NEWS2 engine    │
-│                      │   /observations /alerts        │                     │
-└──────────────────────┘                                └──────────┬──────────┘
-                                                                   ▼
-                                                        ┌─────────────────────┐
-                                                        │  PostgreSQL (RDS)   │
-                                                        │  + S3 for reports   │
-                                                        └─────────────────────┘
+┌──────────────────────┐       SOAP 1.1 / XML       ┌───────────────────────────┐
+│  legacy-sim          │ ◄───────────────────────── │  NestJS API               │
+│  simulated hospital  │  GetPatient                │                           │
+│  CommonJS · :8080    │  ListAdmissions            │  SOAP client              │
+│                      │  GetObservations           │    → normaliser           │
+│                      │ ─────────────────────────► │    → NEWS2 engine         │
+└──────────────────────┘                            │    → sync (POST /sync)    │
+                                                    └─────────────┬─────────────┘
+                                                                  │ Prisma 7
+                                                                  ▼
+                                                    ┌───────────────────────────┐
+                                                    │  PostgreSQL 16            │
+                                                    │  Patient · Admission      │
+                                                    │  Observation · Score      │
+                                                    │  SyncRun                  │
+                                                    └───────────────────────────┘
 ```
 
-Three deployable pieces in one repository. The legacy simulator is a real SOAP service with a hand-written WSDL — not a mock — so the integration layer is built against an actual contract, including the awkward parts.
+The simulator is a real SOAP service with a hand-written contract — not a mock — so the integration is built against the awkward parts: `xsi:nil` fields that arrive as objects, empty lists that arrive as `null`, dates without a zone, decimals with a comma. It stands in for a system VitaLink would not control; in a real deployment it would not exist.
 
-**Two design decisions worth explaining:**
+Inside the API, everything that knows about the legacy format lives in `src/legacy/`. The clinical model in `src/domain/` imports nothing from it. If the hospital replaced its system with an HL7 FHIR server tomorrow, `legacy/` would be rewritten and nothing else would notice.
 
-Scores live in their own table rather than as columns on an observation. Scores are derived data; raw observations are not. Keeping them separate means the scoring algorithm can change and history can be recomputed without ever touching the original clinical record.
+**Design decisions worth explaining:**
 
-Every sync run writes a row whether it succeeds or fails. An integration job that quietly does nothing is the most common failure mode in this kind of system, and the only defence is making each run visible.
+Scores live in their own table rather than as columns on an observation. Observations are raw clinical data and are never modified; scores are derived, and carry the version of the engine that produced them. If the algorithm changes, history can be recomputed without touching what was recorded.
+
+Every sync run writes a row whether it succeeds, partially succeeds or fails. An integration that quietly does nothing is the most common failure in this kind of system, and the defence is making every run visible. A run that had to refuse even one record is `partial`, not `succeeded`: green has to mean everything arrived.
+
+Every timestamp is stored as `timestamptz`. The whole integration exists to turn a zone-less local time into an unambiguous instant; storing that instant in a zone-less column would reintroduce the problem inside our own database.
+
+The reasoning behind these and other decisions is recorded in [`docs/decisions/`](docs/decisions/).
+
+## Clinical scoring
+
+**NEWS2** (National Early Warning Score 2) is the Royal College of Physicians' standard for detecting deterioration in adults on general wards. Seven parameters each score 0 to 3, and the aggregate drives a defined clinical response.
+
+| Parameter | 3 | 2 | 1 | **0** | 1 | 2 | 3 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Respiration rate | ≤ 8 | | 9–11 | **12–20** | | 21–24 | ≥ 25 |
+| SpO₂ scale 1 | ≤ 91 | 92–93 | 94–95 | **≥ 96** | | | |
+| SpO₂ scale 2 | ≤ 83 | 84–85 | 86–87 | **88–92**, or ≥ 93 on air | 93–94 on O₂ | 95–96 on O₂ | ≥ 97 on O₂ |
+| Air or oxygen | | Oxygen | | **Air** | | | |
+| Systolic BP | ≤ 90 | 91–100 | 101–110 | **111–219** | | | ≥ 220 |
+| Pulse | ≤ 40 | | 41–50 | **51–90** | 91–110 | 111–130 | ≥ 131 |
+| Consciousness | | | | **Alert** | | | C, V, P or U |
+| Temperature | ≤ 35.0 | | 35.1–36.0 | **36.1–38.0** | 38.1–39.0 | ≥ 39.1 | |
+
+| Aggregate | Risk | Response |
+| --- | --- | --- |
+| 0–4 | Low | Ward-based response |
+| 3 in any single parameter | Low–medium | Urgent ward-based response |
+| 5–6 | Medium | Key threshold for urgent response |
+| 7 or more | High | Urgent or emergency response |
+
+**How the table was verified.** It was transcribed from the RCP's published charts and checked against four sources before any code was written. The check mattered: two of the first three automated readings of the PDF charts were wrong, having misaligned the columns and assumed a symmetry the chart does not have. A majority of them put a temperature of 39.1 °C at 3 points; it is 2. See [ADR 0005](docs/decisions/0005-news2-is-implemented-as-published.md).
+
+**Scale 2** is for patients in chronic hypercapnic respiratory failure — in practice, advanced COPD — whose target saturation is 88–92%. For them, more oxygen causes harm, which is why a high saturation reached on oxygen scores. The scale is a clinical decision recorded against the patient, and VitaLink never infers it from other data. See [ADR 0003](docs/decisions/0003-news2-scale-is-received-not-inferred.md).
+
+**Consciousness** arrives as a Glasgow Coma Scale — which is what the ward actually charts — and is converted to ACVPU from its components, never its total. See [ADR 0006](docs/decisions/0006-glasgow-to-acvpu-mapping.md).
+
+## Known limitations
+
+These are stated so that nobody mistakes a number VitaLink produces for more than it is.
+
+- **Pregnancy and spinal cord injury cannot be excluded.** NEWS2 should not be used in pregnancy and may be unreliable after spinal cord injury. The hospital's contract carries neither, so VitaLink cannot know it is scoring such a patient. Patients under 16, whose date of birth VitaLink does have, are not scored.
+- **Hypertension below 220 mmHg scores 0.** This is a property of NEWS2, implemented as published. A score of 0 is not a finding that the pressure is fine.
+- **Long-standing low verbal responses read as new confusion.** Dementia, aphasia or motor neurone disease lower the Glasgow verbal score permanently, and the conversion reads it as C, adding 3 points at every round. A ward nurse reads a Glasgow against the patient's baseline; the source does not send one.
+- **Scores can be partial.** A missing measurement leaves its parameter unscored, and the score is marked as a lower bound. Over the simulated ward, roughly a third of scores are partial — every parameter goes missing only occasionally, but the gaps add up.
+- **Two dependency advisories are accepted.** `npm audit` reports four high-severity issues from the Prisma CLI; none is reachable in this project. See [ADR 0007](docs/decisions/0007-accepted-dependency-advisories.md).
 
 ## Tech stack
 
 | Layer | Technology |
 | --- | --- |
-| API | NestJS, TypeScript |
-| Database | PostgreSQL, Prisma |
-| Integration | SOAP (node-soap), WSDL, XML |
-| Validation | Zod |
-| Testing | Vitest, Supertest, Testcontainers |
-| Cloud | AWS — Lambda, S3, RDS, EventBridge, CloudWatch |
-| Frontend | React, TypeScript, Vite |
-| Tooling | Docker Compose, GitHub Actions |
-
-## Clinical scoring
-
-> **Note:** this section describes the intended implementation. Verify every threshold against the official Royal College of Physicians NEWS2 documentation before relying on it.
-
-**NEWS2** (National Early Warning Score 2) is the UK Royal College of Physicians standard for detecting clinical deterioration in adult patients. It scores seven physiological parameters, each from 0 to 3, and the aggregate drives a defined escalation response.
-
-| Parameter | Measured as |
-| --- | --- |
-| Respiration rate | breaths per minute |
-| Oxygen saturation | SpO₂ %, with a separate scale for patients with hypercapnic respiratory failure |
-| Supplemental oxygen | air or oxygen |
-| Systolic blood pressure | mmHg |
-| Pulse | beats per minute |
-| Consciousness | ACVPU — alert, confusion, voice, pain, unresponsive |
-| Temperature | °C |
-
-The aggregate score maps to a clinical response: low scores mean routine monitoring, middle scores an urgent review, high scores an emergency response. A maximum score in any single parameter also triggers review, even when the total is otherwise low — a patient can be critically unwell in one axis while looking unremarkable overall.
-
-Implementing a published standard rather than inventing thresholds is a deliberate choice. It means the scoring logic is verifiable against a public specification, it behaves the way clinical staff already expect, and every edge case has a documented correct answer to test against.
+| API | NestJS 12, TypeScript 6 (strict), ES modules |
+| Database | PostgreSQL 16, Prisma 7 with the `pg` driver adapter |
+| Integration | SOAP 1.1, WSDL, node-soap |
+| Hospital simulator | Node.js, CommonJS, Faker |
+| Testing | Vitest, Supertest |
+| Tooling | Docker Compose, GitHub Actions, oxlint |
+| *Planned* | AWS (Lambda, RDS, EventBridge, S3, CloudWatch), React dashboard |
 
 ## Running locally
 
@@ -96,41 +117,58 @@ Implementing a published standard rather than inventing thresholds is a delibera
 git clone https://github.com/matii1942/VitaLink.git
 cd VitaLink
 
-cp .env.example .env        # PowerShell: Copy-Item .env.example .env
-docker compose up -d        # starts PostgreSQL
+cp .env.example .env              # PowerShell: Copy-Item .env.example .env
+docker compose up -d --build      # PostgreSQL and the hospital simulator
 
 cd apps/api
 npm ci
-npx prisma migrate dev
+npx prisma migrate dev            # creates the tables
+npx prisma generate               # Prisma 7 no longer does this automatically
 npm run start:dev
 ```
 
-The API is then available at `http://localhost:3000`, with a health check at `/health`.
+Then, from another terminal:
 
 ```bash
-npm test                    # run the test suite
-npm run test:coverage       # with a coverage report
+curl -X POST http://localhost:3000/sync     # PowerShell: Invoke-RestMethod -Method Post http://localhost:3000/sync
 ```
 
-> Verified end to end at the close of Sprint 0.
+| Address | What it is |
+| --- | --- |
+| `http://localhost:8080/hospital?wsdl` | The simulated hospital's SOAP contract |
+| `http://localhost:3000/health` | API health check |
+| `POST http://localhost:3000/sync` | Runs a synchronisation |
+| `http://localhost:3000/sync/runs` | The ten most recent runs |
+
+`npx prisma studio`, from `apps/api`, opens a browser view of the database.
 
 ## Testing
 
-Business logic is tested in isolation and endpoints are tested against a real, disposable PostgreSQL instance.
+```bash
+cd apps/api
+npm test            # unit tests
+npm run test:e2e    # boots the application and drives it over HTTP
+npm run test:cov    # unit tests with a coverage report
 
-The NEWS2 engine is a pure module — no database, no network, inputs to score — which makes exhaustive testing of every threshold and boundary straightforward. That is the part of this system where a wrong answer matters most, so it is the part held to the highest coverage.
+cd ../legacy-sim
+npm test            # generator, legacy format, and the SOAP service over real SOAP
+```
+
+The NEWS2 engine is a pure module — vital signs in, score out, no database or clock — which is what makes exhaustive testing possible. It has 80 tests, including one on each side of every band boundary, because in a clinical score the errors live at the edges. The normaliser's tests run against records captured from the simulator's actual output, not invented ones.
+
+CI runs both packages in parallel on every push, and builds the simulator's Docker image from a clean checkout. Integration tests against a real PostgreSQL instance come with Sprint 3.
 
 ## Roadmap
 
-| Sprint | Focus |
-| --- | --- |
-| 0 | Repository, Docker, Prisma, CI — *in progress* |
-| 1 | Legacy SOAP service, WSDL, synthetic data generator |
-| 2 | SOAP client, synchronization, NEWS2 engine |
-| 3 | REST API, integration tests, query optimization |
-| 4 | AWS deployment, infrastructure as code |
-| 5 | Clinical summaries with token-budgeted LLM calls |
-| 6 | React dashboard |
+| Sprint | Focus | |
+| --- | --- | --- |
+| 0 | Repository, Docker, CI, health endpoint | ✅ |
+| 1 | Simulated hospital: WSDL, SOAP service, synthetic data generator | ✅ |
+| 2 | SOAP client, normaliser, NEWS2 engine, Prisma, synchronisation | ✅ |
+| 3 | REST API for consumers, integration tests on PostgreSQL, query optimisation | next |
+| 4 | AWS deployment, scheduled sync, infrastructure as code | |
+| 5 | Clinical summaries with token-budgeted LLM calls | |
+| 6 | React ward dashboard | |
 
 ## About the data
 
