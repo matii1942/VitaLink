@@ -19,6 +19,15 @@ jobs:
     name: API — lint and test
     runs-on: ubuntu-latest
 
+    # The application refuses to start without these (see legacy.module.ts).
+    # Nothing in this job connects to either address: the database pool and
+    # the SOAP client both open on first use, and no test here uses them. They
+    # only have to be present and well-formed. Sprint 3 replaces them with a
+    # real PostgreSQL service container for integration tests.
+    env:
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/ci?schema=public
+      LEGACY_SOAP_URL: http://localhost:8080/hospital?wsdl
+
     defaults:
       run:
         working-directory: apps/api

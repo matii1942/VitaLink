@@ -18,6 +18,13 @@
 
 import type { News2Scale } from '../domain/clinical.js';
 
+/**
+ * Stored with every score. If the chart transcription or the rules around it
+ * ever change, bump this, and every score produced by the previous version can
+ * be found and recomputed. The raw observations are never touched.
+ */
+export const NEWS2_ENGINE_VERSION = 'news2-rcp-2017/1';
+
 /** Alert, new Confusion, responds to Voice, responds to Pain, Unresponsive. */
 export type Acvpu = 'A' | 'C' | 'V' | 'P' | 'U';
 

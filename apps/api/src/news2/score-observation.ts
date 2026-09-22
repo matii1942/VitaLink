@@ -22,6 +22,8 @@ export type ObservationScore =
       observationId: string;
       status: 'scored';
       result: News2Result;
+      /** The scale the score was computed on. */
+      scaleUsed: 1 | 2;
       /** 'assumed' when the patient had no recorded scale (ADR 0003). */
       scaleSource: 'recorded' | 'assumed';
     }
@@ -46,6 +48,8 @@ export function scoreObservation(patient: Patient, observation: Observation): Ob
     return { observationId: observation.observationId, status: 'not-eligible', reason: 'under-16' };
   }
 
+  const scaleUsed = patient.news2Scale ?? 1;
+
   const result = calculateNews2({
     respirationRate: observation.respirationRate,
     oxygenSaturation: observation.oxygenSaturation,
@@ -54,13 +58,14 @@ export function scoreObservation(patient: Patient, observation: Observation): Ob
     pulse: observation.pulse,
     consciousness: glasgowToAcvpu(observation.gcs),
     temperature: observation.temperature,
-    scale: patient.news2Scale ?? 1,
+    scale: scaleUsed,
   });
 
   return {
     observationId: observation.observationId,
     status: 'scored',
     result,
+    scaleUsed,
     scaleSource: patient.news2Scale === null ? 'assumed' : 'recorded',
   };
 }
