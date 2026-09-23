@@ -39,7 +39,10 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          # The version lives in .nvmrc, at the repository root, and nowhere
+          # else. Whoever changes it changes it for every machine that runs
+          # this code: this runner, the developer's, and the Docker image.
+          node-version-file: '.nvmrc'
           cache: 'npm'
           cache-dependency-path: apps/api/package-lock.json
 
@@ -87,7 +90,10 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          # The version lives in .nvmrc, at the repository root, and nowhere
+          # else. Whoever changes it changes it for every machine that runs
+          # this code: this runner, the developer's, and the Docker image.
+          node-version-file: '.nvmrc'
           cache: 'npm'
           cache-dependency-path: apps/legacy-sim/package-lock.json
 

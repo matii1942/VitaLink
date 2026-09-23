@@ -2,7 +2,9 @@
 #
 # Only runtime dependencies go into the image. Vitest and the test suite stay
 # outside: the image is what would run, not what was used to check it.
-FROM node:22-alpine
+# Pinned to the exact version in .nvmrc, so the image runs what the
+# tests ran on. "22-alpine" would drift to a newer patch on any rebuild.
+FROM node:22.23.2-alpine
 
 WORKDIR /app
 
