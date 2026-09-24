@@ -30,6 +30,12 @@ export function admissionRow(a: Admission) {
     mrn: a.mrn,
     admittedAt: a.admittedAt,
     dischargedAt: a.dischargedAt,
+    dischargeDestination: a.dischargeDestination,
+    // Flattened into two columns: a nullable embedded object is not a thing a
+    // relational table has, and a table of its own for a one-to-one pair that
+    // is never queried on its own would be a join for nothing.
+    transferUnit: a.criticalCareRequest?.unit ?? null,
+    transferRequestedAt: a.criticalCareRequest?.requestedAt ?? null,
     ward: a.ward,
     admissionType: a.admissionType,
     sourceUnit: a.sourceUnit,

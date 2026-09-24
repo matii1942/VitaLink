@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { NEWS2_ENGINE_VERSION } from '../news2/news2.js';
 import type { ObservationScore } from '../news2/score-observation.js';
-import { finalStatus, observationRow, scoreRow } from './sync.mapper.js';
+import { admissionRow, finalStatus, observationRow, scoreRow } from './sync.mapper.js';
 
 describe('observationRow', () => {
   it('flattens the Glasgow object into its four columns', () => {
@@ -20,6 +20,46 @@ describe('observationRow', () => {
     });
     expect(row).toMatchObject({ gcsEye: 4, gcsVerbal: 5, gcsMotor: 6, gcsTotal: 15 });
     expect(row).not.toHaveProperty('gcs');
+  });
+});
+
+describe('admissionRow', () => {
+  const base = {
+    admissionId: 'ADM-000001',
+    mrn: 'MRN-000001',
+    admittedAt: new Date('2026-09-17T07:44:00Z'),
+    dischargedAt: null,
+    dischargeDestination: null,
+    criticalCareRequest: null,
+    ward: 'internal-medicine',
+    admissionType: 'urgent' as const,
+    sourceUnit: 'emergency' as const,
+    diagnosis: 'Neumonia adquirida en la comunidad',
+    firstAdmission: true,
+  };
+
+  it('leaves the transfer columns null when no bed was asked for', () => {
+    expect(admissionRow(base)).toMatchObject({
+      transferUnit: null,
+      transferRequestedAt: null,
+      dischargeDestination: null,
+    });
+  });
+
+  it('flattens the bed request into two columns', () => {
+    const row = admissionRow({
+      ...base,
+      criticalCareRequest: {
+        unit: 'coronary-care',
+        requestedAt: new Date('2026-09-22T11:20:00Z'),
+      },
+    });
+
+    expect(row).toMatchObject({
+      transferUnit: 'coronary-care',
+      transferRequestedAt: new Date('2026-09-22T11:20:00Z'),
+    });
+    expect(row).not.toHaveProperty('criticalCareRequest');
   });
 });
 

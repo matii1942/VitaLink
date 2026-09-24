@@ -237,11 +237,21 @@ function generateAdmissions(patients, now) {
       to: new Date(now.getTime() - 1 * MS_PER_DAY),
     });
 
+    // The stay as planned on the day of admission. An escalation to critical
+    // care, discovered later while charting the observations, overrides both
+    // of these: the patient did not go home.
+    const dischargedAt = pickDischarge(admittedAt, now);
+
     return {
       admissionId: `ADM-${String(i + 1).padStart(6, '0')}`,
       mrn: patient.mrn,
       admittedAt,
-      dischargedAt: pickDischarge(admittedAt, now),
+      dischargedAt,
+      /** home | intensive-care | coronary-care. Null while still in a bed. */
+      dischargeDestination: dischargedAt === null ? null : 'home',
+      /** Set when a critical care bed has been asked for. */
+      transferUnit: null,
+      transferRequestedAt: null,
       ward,
       admissionType,
       sourceUnit: pickSourceUnit(ward, admissionType),
@@ -317,6 +327,43 @@ const TRAJECTORIES = [
   { value: 'deteriorating', weight: 10 },
 ];
 
+// A general ward is not a critical care unit (ADR 0002), and the data has to
+// say so. Once a patient's numbers put them in the emergency response band the
+// ward does not go on charting them every six hours for another two days: the
+// critical care outreach team is called and a bed is asked for. Data that shows
+// otherwise is data no hospital would produce.
+//
+// The generator does not compute NEWS2. That is VitaLink's job, and a second
+// implementation of a clinical score living here is exactly how the two drift
+// apart. It uses severity as the proxy, and these two numbers were measured
+// against the real engine over 600 simulated patients:
+//
+//   severity 0.50 -> median aggregate 7, the emergency response threshold
+//   severity 0.70 -> median aggregate 10, because the Glasgow starts to drop
+//                    and any level below alert adds 3 in one step
+//
+// So the ceiling sits below that second cliff. Above it, the score describes
+// somebody who is no longer on a general ward.
+const SEVERITY_EMERGENCY = 0.5;
+const SEVERITY_CEILING = 0.68;
+
+// One reading of 7 is an event, not a verdict: hypoxia answers to oxygen and
+// fever to antibiotics, and plenty of patients cross the threshold once and
+// come back. Two rounds in a row is the pattern that gets a bed asked for.
+const ROUNDS_TO_ESCALATE = 2;
+
+// Asking for a bed is not the same as getting one. The rest are still on the
+// ward when the dataset is generated, waiting.
+const BED_FOUND_SHARE = 0.6;
+const BED_WAIT_HOURS = { min: 2, max: 16 };
+
+// Where a ward escalates to depends on the ward.
+const CRITICAL_CARE_UNIT = {
+  cardiology: 'coronary-care',
+  'internal-medicine': 'intensive-care',
+  surgery: 'intensive-care',
+};
+
 // How far each vital sign moves between a well patient and a severely
 // unwell one. Signs do not drift independently: a patient who is going off
 // gets tachypnoeic, hypoxic, tachycardic, hypotensive and febrile together,
@@ -381,46 +428,125 @@ function generateObservations(admissions, patients, now) {
   const observations = [];
 
   for (const admission of admissions) {
-    const patient = byMrn.get(admission.mrn);
-    const trajectory = faker.helpers.weightedArrayElement(TRAJECTORIES);
-    const baseline = baselineFor(patient);
-    let respSupport = null; // carried from one round to the next
-
-    const from = admission.admittedAt;
-    const to = admission.dischargedAt ?? now;
-    const spanMs = to.getTime() - from.getTime();
-    const rounds = Math.floor(spanMs / (ROUND_INTERVAL_HOURS * MS_PER_HOUR));
-
-    for (let r = 0; r <= rounds; r += 1) {
-      // Rounds are nominally every six hours. Nobody charts on the minute,
-      // so each one lands within about half an hour of its slot.
-      const nominal = from.getTime() + r * ROUND_INTERVAL_HOURS * MS_PER_HOUR;
-      const jitter = faker.number.int({ min: -25, max: 25 }) * 60 * 1000;
-      const recordedAt = new Date(Math.min(nominal + jitter, to.getTime()));
-
-      if (recordedAt < from) continue;
-
-      const progress = rounds === 0 ? 1 : r / rounds;
-      const severity = severityAt(trajectory, progress);
-
-      respSupport = nextRespSupport(patient, severity, respSupport);
-
-      observations.push(
-        buildObservation({
-          index: observations.length,
-          admission,
-          patient,
-          recordedAt,
-          baseline,
-          severity,
-          respSupport,
-          beforeCutover: recordedAt < cutover,
-        }),
-      );
+    for (const observation of chartAdmission({
+      admission,
+      patient: byMrn.get(admission.mrn),
+      now,
+      cutover,
+      startIndex: observations.length,
+    })) {
+      observations.push(observation);
     }
   }
 
   return observations;
+}
+
+/**
+ * Charts one admission from beginning to end, and may end it.
+ *
+ * The ending is not known in advance. A patient who crosses the emergency
+ * threshold twice in a row has a critical care bed asked for, and from that
+ * moment the admission either closes with a transfer or stays open with the
+ * patient waiting in the ward — neither of which is what was drawn when the
+ * admission was built. That is the right way round: in a hospital the
+ * observations are what decide how the admission ends, not the reverse.
+ *
+ * Mutates `admission`, which is why it takes it rather than a copy of it.
+ */
+function chartAdmission({ admission, patient, now, cutover, startIndex }) {
+  const trajectory = faker.helpers.weightedArrayElement(TRAJECTORIES);
+  const baseline = baselineFor(patient);
+  const observations = [];
+
+  const from = admission.admittedAt;
+
+  // The stay as planned: home on the discharge date, or still here today.
+  // Progress through it is what drives the trajectory.
+  const planned = admission.dischargedAt ?? now;
+  const plannedRounds = Math.floor(
+    (planned.getTime() - from.getTime()) / (ROUND_INTERVAL_HOURS * MS_PER_HOUR),
+  );
+
+  // The last moment a round can be charted. It moves if the admission's ending
+  // moves, which is what an escalation does.
+  let endsAt = planned;
+
+  let respSupport = null; // carried from one round to the next
+  let consecutiveHigh = 0;
+  let plateau = null; // set once a bed has been asked for
+
+  for (let r = 0; ; r += 1) {
+    // Rounds are nominally every six hours. Nobody charts on the minute,
+    // so each one lands within about half an hour of its slot.
+    const nominal = from.getTime() + r * ROUND_INTERVAL_HOURS * MS_PER_HOUR;
+    if (nominal > endsAt.getTime()) break;
+
+    const jitter = faker.number.int({ min: -25, max: 25 }) * 60 * 1000;
+    const recordedAt = new Date(Math.min(nominal + jitter, endsAt.getTime()));
+
+    if (recordedAt < from) continue;
+
+    // Past the planned stay the trajectory has nothing left to say: the only
+    // reason the patient is still here is that they are waiting for a bed.
+    const progress = plannedRounds === 0 ? 1 : Math.min(r / plannedRounds, 1);
+    const severity = plateau === null ? severityAt(trajectory, progress) : plateauAt(plateau);
+
+    respSupport = nextRespSupport(patient, severity, respSupport);
+
+    observations.push(
+      buildObservation({
+        index: startIndex + observations.length,
+        admission,
+        patient,
+        recordedAt,
+        baseline,
+        severity,
+        respSupport,
+        beforeCutover: recordedAt < cutover,
+      }),
+    );
+
+    if (plateau !== null) continue;
+
+    consecutiveHigh = severity >= SEVERITY_EMERGENCY ? consecutiveHigh + 1 : 0;
+
+    if (consecutiveHigh >= ROUNDS_TO_ESCALATE) {
+      plateau = severity;
+      endsAt = requestCriticalCareBed(admission, recordedAt, now);
+    }
+  }
+
+  return observations;
+}
+
+/**
+ * The ward asks for a critical care bed, and the admission's ending changes.
+ *
+ * @returns the new last moment a round can be charted
+ */
+function requestCriticalCareBed(admission, requestedAt, now) {
+  admission.transferUnit = CRITICAL_CARE_UNIT[admission.ward];
+  admission.transferRequestedAt = requestedAt;
+
+  const waitMs = faker.number.int(BED_WAIT_HOURS) * MS_PER_HOUR;
+  const transferredAt = new Date(requestedAt.getTime() + waitMs);
+
+  // A bed that would appear after the dataset's own "now" has not appeared.
+  const bedFound =
+    faker.datatype.boolean({ probability: BED_FOUND_SHARE }) && transferredAt <= now;
+
+  if (!bedFound) {
+    // Still in the ward, waiting, and therefore still on the board. Whatever
+    // discharge was drawn when the admission was built never happened.
+    admission.dischargedAt = null;
+    admission.dischargeDestination = null;
+    return now;
+  }
+
+  admission.dischargedAt = transferredAt;
+  admission.dischargeDestination = admission.transferUnit;
+  return transferredAt;
 }
 
 /**
@@ -453,10 +579,29 @@ function baselineFor(patient) {
 function severityAt(trajectory, progress) {
   const noise = faker.number.float({ min: -0.04, max: 0.04, fractionDigits: 3 });
 
-  if (trajectory === 'deteriorating') return clamp(progress ** 1.8 + noise, 0, 1);
+  // The ceiling is what keeps a ward patient inside the range a ward charts.
+  // Only the deteriorating trajectory ever comes near it: stable sits at 0.08,
+  // and improving starts at 0.45 and falls, so neither reaches the emergency
+  // threshold at 0.50. An improving patient escalating would be a contradiction.
+  if (trajectory === 'deteriorating') {
+    return clamp(progress ** 1.8 + noise, 0, SEVERITY_CEILING);
+  }
+
   if (trajectory === 'improving') return clamp(0.45 * (1 - progress) + noise, 0, 1);
 
   return clamp(0.08 + noise, 0, 1);
+}
+
+/**
+ * Where a patient sits once the bed has been asked for.
+ *
+ * They stop getting worse on paper: they are on oxygen, they have fluids, and
+ * the outreach team is at the bedside. The numbers hold around where they were
+ * and drift a little, rather than climbing to a score nobody on a ward charts.
+ */
+function plateauAt(severity) {
+  const drift = faker.number.float({ min: -0.05, max: 0.05, fractionDigits: 3 });
+  return clamp(severity + drift, 0, SEVERITY_CEILING);
 }
 
 function buildObservation({
@@ -568,16 +713,24 @@ function nextRespSupport(patient, severity, previous) {
  * Consciousness is charted as a Glasgow. Ward patients are almost all fully
  * alert; confusion appears late, when someone is genuinely going off.
  *
+ * The threshold is the emergency threshold itself, not a number of its own.
+ * New confusion in a ward patient is not one more sign among several: on the
+ * chart it scores 3 on its own, which is a red score and an escalation. Tying
+ * it to any other number would let the dataset contain a confused patient whom
+ * nobody escalated, or an escalation ladder that confusion never reached.
+ *
  * Records predating the system migration carry only the total.
  */
+const SEVERITY_DROWSY = 0.62;
+
 function glasgowFor(severity, beforeCutover) {
   let eye = 4;
   let verbal = 5;
   let motor = 6;
 
-  if (severity > 0.7 && faker.datatype.boolean({ probability: 0.45 })) {
+  if (severity > SEVERITY_EMERGENCY && faker.datatype.boolean({ probability: 0.45 })) {
     verbal = 4; // confused
-    if (severity > 0.9 && faker.datatype.boolean({ probability: 0.3 })) {
+    if (severity > SEVERITY_DROWSY && faker.datatype.boolean({ probability: 0.3 })) {
       eye = 3; // opens to voice
     }
   }

@@ -58,6 +58,50 @@ describe('ListAdmissions', () => {
   });
 });
 
+describe('ListAdmissions, transfer fields', () => {
+  it('answers a request with no filters with every admission', async () => {
+    // node-soap sends no body element at all when every field is nil, so the
+    // handler receives null rather than an empty object. It used to answer a
+    // 500 to what is a perfectly valid request.
+    const [result] = await client.ListAdmissionsAsync({ ward: null, activeOnly: null });
+    const admissions = [].concat(result.admissions.admission ?? []);
+
+    expect(admissions.length).toBeGreaterThan(0);
+  });
+
+  it('sends the transfer fields, nil when there is nothing to send', async () => {
+    const [result] = await client.ListAdmissionsAsync({ ward: null, activeOnly: null });
+    const admissions = [].concat(result.admissions.admission ?? []);
+
+    const escalated = admissions.filter((a) => typeof a.transferUnit === 'string');
+    const never = admissions.filter((a) => a.transferUnit?.attributes?.['xsi:nil'] === 'true');
+
+    // The default dataset contains both kinds.
+    expect(escalated.length).toBeGreaterThan(0);
+    expect(never.length).toBeGreaterThan(0);
+
+    for (const a of escalated) {
+      expect(['UTI', 'UCO']).toContain(a.transferUnit);
+      expect(a.transferRequestedAt).toMatch(/^\d{2}\/\d{2}\/\d{4} \d{2}:\d{2}$/);
+    }
+
+    for (const a of never) {
+      expect(a.transferRequestedAt?.attributes?.['xsi:nil']).toBe('true');
+    }
+  });
+
+  it('codes the destination of every admission that has ended', async () => {
+    const [result] = await client.ListAdmissionsAsync({ ward: null, activeOnly: 'N' });
+    const admissions = [].concat(result.admissions.admission ?? []);
+    const ended = admissions.filter((a) => typeof a.dischargedAt === 'string');
+
+    expect(ended.length).toBeGreaterThan(0);
+    for (const a of ended) {
+      expect(['DOMICILIO', 'UTI', 'UCO']).toContain(a.dischargeDestination);
+    }
+  });
+});
+
 describe('GetObservations', () => {
   it('sends temperatures with a comma decimal on the wire', async () => {
     await client.GetObservationsAsync({ admissionId: 'ADM-000001', since: null });

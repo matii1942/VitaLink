@@ -46,6 +46,12 @@ export interface LegacyAdmission {
   diagnosis: Nillable<string>;
   /** S | N */
   firstAdmission: string;
+  /** UTI | UCO — the unit a bed was asked for in */
+  transferUnit: Nillable<string>;
+  /** DD/MM/YYYY HH:MM, when the bed was asked for */
+  transferRequestedAt: Nillable<string>;
+  /** DOMICILIO | UTI | UCO */
+  dischargeDestination: Nillable<string>;
 }
 
 export interface LegacyObservation {

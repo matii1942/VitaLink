@@ -20,6 +20,9 @@
 import type {
   Admission,
   AdmissionType,
+  CriticalCareRequest,
+  CriticalCareUnit,
+  DischargeDestination,
   GlasgowComaScale,
   News2Scale,
   Observation,
@@ -80,6 +83,19 @@ const SOURCE_UNIT: Record<string, SourceUnit> = {
 const ADMISSION_TYPE: Record<string, AdmissionType> = {
   URG: 'urgent',
   PROG: 'scheduled',
+};
+
+const CRITICAL_CARE_UNIT: Record<string, CriticalCareUnit> = {
+  UTI: 'intensive-care',
+  UCO: 'coronary-care',
+};
+
+// The hospital records a transfer to critical care with the same code as the
+// unit itself, so this table is the one above plus going home.
+const DISCHARGE_DESTINATION: Record<string, DischargeDestination> = {
+  DOMICILIO: 'home',
+  UTI: 'intensive-care',
+  UCO: 'coronary-care',
 };
 
 // Two codings coexist after an unfinished migration. Both have to be read.
@@ -311,17 +327,67 @@ export function normalizePatient(p: LegacyPatient): Patient {
 }
 
 export function normalizeAdmission(a: LegacyAdmission): Admission {
+  const dischargedAt = parseLegacyDateTime('dischargedAt', a.dischargedAt);
+  const dischargeDestination = parseOptionalCode(
+    'dischargeDestination',
+    a.dischargeDestination,
+    DISCHARGE_DESTINATION,
+  );
+
+  // Two fields, one fact, and they have to agree. A discharge with nowhere to
+  // go, or a destination with no discharge, is a record the source contradicted
+  // itself on — and either one puts a patient on the ward board who is not
+  // there, or takes one off it who is.
+  if ((dischargedAt === null) !== (dischargeDestination === null)) {
+    throw new NormalizationError(
+      'dischargeDestination',
+      { dischargedAt: unwrap(a.dischargedAt), dischargeDestination: unwrap(a.dischargeDestination) },
+      'must be present exactly when dischargedAt is',
+    );
+  }
+
   return {
     admissionId: a.admissionId,
     mrn: a.mrn,
     admittedAt: required('admittedAt', parseLegacyDateTime('admittedAt', a.admittedAt)),
-    dischargedAt: parseLegacyDateTime('dischargedAt', a.dischargedAt),
+    dischargedAt,
+    dischargeDestination,
+    criticalCareRequest: parseCriticalCareRequest(a),
     ward: a.ward,
     admissionType: parseCode('admissionType', a.admissionType, ADMISSION_TYPE),
     sourceUnit: parseOptionalCode('sourceUnit', a.sourceUnit, SOURCE_UNIT),
     diagnosis: unwrap(a.diagnosis),
     firstAdmission: parseLegacyFlag('firstAdmission', a.firstAdmission),
   };
+}
+
+/**
+ * The critical care bed request: a unit and the moment it was asked for.
+ *
+ * Both fields or neither. Half a request is a corrupt record, not a partial
+ * one: a unit with no time cannot be placed on a timeline, and a time with no
+ * unit does not say where the patient was going.
+ *
+ * What this deliberately does not check is whether a patient discharged to
+ * intensive care has a request on file. A hospital that transferred somebody
+ * without charting the request produced incomplete data, not malformed data,
+ * and refusing the admission would lose the transfer as well.
+ */
+function parseCriticalCareRequest(a: LegacyAdmission): CriticalCareRequest | null {
+  const unit = parseOptionalCode('transferUnit', a.transferUnit, CRITICAL_CARE_UNIT);
+  const requestedAt = parseLegacyDateTime('transferRequestedAt', a.transferRequestedAt);
+
+  if (unit === null && requestedAt === null) return null;
+
+  if (unit === null || requestedAt === null) {
+    throw new NormalizationError(
+      'transferUnit',
+      { transferUnit: unwrap(a.transferUnit), transferRequestedAt: unwrap(a.transferRequestedAt) },
+      'a bed request needs both a unit and a time, or neither',
+    );
+  }
+
+  return { unit, requestedAt };
 }
 
 export function normalizeObservation(o: LegacyObservation): Observation {

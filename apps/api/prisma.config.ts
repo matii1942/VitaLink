@@ -8,12 +8,27 @@
  * The path resolves from the working directory. Prisma commands run from
  * apps/api, either directly or through npm scripts, which npm always runs in
  * the package's own folder, so the root .env is two levels up.
+ *
+ * NODE_ENV=test makes .env.test win, exactly as it does for the application
+ * (see src/config/env.ts, which explains the ordering). That is the escape
+ * hatch for running a Prisma command against the test database by hand:
+ *
+ *   NODE_ENV=test npx prisma migrate deploy      # bash
+ *   $env:NODE_ENV="test"; npx prisma migrate deploy   # PowerShell
+ *
+ * The test suite applies its own migrations, so this is rarely needed.
  */
 import path from 'node:path';
 import { config } from 'dotenv';
 import { defineConfig } from 'prisma/config';
 
-config({ path: path.resolve(process.cwd(), '../../.env') });
+const repositoryRoot = path.resolve(process.cwd(), '../..');
+
+if (process.env['NODE_ENV'] === 'test') {
+  config({ path: path.join(repositoryRoot, '.env.test') });
+}
+
+config({ path: path.join(repositoryRoot, '.env') });
 
 export default defineConfig({
   schema: 'prisma/schema.prisma',

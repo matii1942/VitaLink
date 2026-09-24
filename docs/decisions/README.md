@@ -20,6 +20,9 @@ reversed, a new record supersedes it and both stay.
 | [0005](0005-news2-is-implemented-as-published.md) | NEWS2 is implemented exactly as published, limitations included | Accepted |
 | [0006](0006-glasgow-to-acvpu-mapping.md) | How Glasgow is converted to ACVPU | Accepted |
 | [0007](0007-accepted-dependency-advisories.md) | Two dependency advisories are accepted, not force-fixed | Accepted |
+| [0008](0008-api-does-not-serve-national-ids.md) | The API does not serve national identity numbers | Accepted |
+| [0009](0009-ward-data-stops-at-critical-care.md) | Ward data stops where critical care begins | Accepted |
+| [0010](0010-ward-board-query-measured.md) | The ward board is one lateral join, and carries no extra index | Accepted |
 
 ## Template
 

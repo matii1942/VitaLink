@@ -41,6 +41,9 @@ const activeAdmissionFromWire: LegacyAdmission = {
   sourceUnit: 'GUARDIA',
   diagnosis: 'Insuficiencia respiratoria cronica reagudizada',
   firstAdmission: 'N',
+  transferUnit: NIL,
+  transferRequestedAt: NIL,
+  dischargeDestination: NIL,
 };
 
 // Pre-migration: Glasgow components are nil, only the total survived.
@@ -181,6 +184,8 @@ describe('normalizeAdmission', () => {
       sourceUnit: 'emergency',
       diagnosis: 'Insuficiencia respiratoria cronica reagudizada',
       firstAdmission: false,
+      dischargeDestination: null,
+      criticalCareRequest: null,
     });
   });
 
@@ -188,6 +193,104 @@ describe('normalizeAdmission', () => {
     const admission = normalizeAdmission(activeAdmissionFromWire);
     expect(admission.dischargedAt).toBeNull();
     expect(Boolean(activeAdmissionFromWire.dischargedAt)).toBe(true); // the trap
+  });
+});
+
+/**
+ * The three states of an admission, and the two ways the source can contradict
+ * itself about them. See ADR 0009.
+ */
+describe('normalizeAdmission, critical care', () => {
+  it('reads a discharge home', () => {
+    const admission = normalizeAdmission({
+      ...activeAdmissionFromWire,
+      dischargedAt: '22/09/2026 10:00',
+      dischargeDestination: 'DOMICILIO',
+    });
+
+    expect(admission.dischargedAt).toEqual(new Date('2026-09-22T13:00:00Z'));
+    expect(admission.dischargeDestination).toBe('home');
+    expect(admission.criticalCareRequest).toBeNull();
+  });
+
+  it('reads a patient still in the ward waiting for a bed', () => {
+    const admission = normalizeAdmission({
+      ...activeAdmissionFromWire,
+      transferUnit: 'UTI',
+      transferRequestedAt: '22/09/2026 08:20',
+    });
+
+    // Waiting is not leaving: the patient is still in a bed here.
+    expect(admission.dischargedAt).toBeNull();
+    expect(admission.dischargeDestination).toBeNull();
+    expect(admission.criticalCareRequest).toEqual({
+      unit: 'intensive-care',
+      requestedAt: new Date('2026-09-22T11:20:00Z'),
+    });
+  });
+
+  it('reads a patient who was transferred, keeping the request', () => {
+    const admission = normalizeAdmission({
+      ...activeAdmissionFromWire,
+      transferUnit: 'UCO',
+      transferRequestedAt: '22/09/2026 08:20',
+      dischargedAt: '22/09/2026 16:00',
+      dischargeDestination: 'UCO',
+    });
+
+    expect(admission.dischargeDestination).toBe('coronary-care');
+    expect(admission.criticalCareRequest).toEqual({
+      unit: 'coronary-care',
+      requestedAt: new Date('2026-09-22T11:20:00Z'),
+    });
+
+    // The gap between the two is how long the ward waited for the bed: the
+    // request at 08:20 local, the transfer at 16:00.
+    expect(admission.dischargedAt).toEqual(new Date('2026-09-22T19:00:00Z'));
+  });
+
+  it('refuses a discharge with nowhere to go', () => {
+    expect(() =>
+      normalizeAdmission({ ...activeAdmissionFromWire, dischargedAt: '22/09/2026 10:00' }),
+    ).toThrow(NormalizationError);
+  });
+
+  it('refuses a destination with no discharge', () => {
+    // This one matters more than it looks: it would take a patient off the ward
+    // board who is still in the ward.
+    expect(() =>
+      normalizeAdmission({ ...activeAdmissionFromWire, dischargeDestination: 'DOMICILIO' }),
+    ).toThrow(/must be present exactly when dischargedAt is/);
+  });
+
+  it('refuses half a bed request', () => {
+    expect(() =>
+      normalizeAdmission({ ...activeAdmissionFromWire, transferUnit: 'UTI' }),
+    ).toThrow(/needs both a unit and a time/);
+
+    expect(() =>
+      normalizeAdmission({ ...activeAdmissionFromWire, transferRequestedAt: '22/09/2026 08:20' }),
+    ).toThrow(/needs both a unit and a time/);
+  });
+
+  it('refuses a unit it does not know', () => {
+    expect(() =>
+      normalizeAdmission({
+        ...activeAdmissionFromWire,
+        transferUnit: 'UCI',
+        transferRequestedAt: '22/09/2026 08:20',
+      }),
+    ).toThrow(/expected one of UTI, UCO/);
+  });
+
+  it('refuses a destination it does not know', () => {
+    expect(() =>
+      normalizeAdmission({
+        ...activeAdmissionFromWire,
+        dischargedAt: '22/09/2026 10:00',
+        dischargeDestination: 'CASA',
+      }),
+    ).toThrow(/expected one of DOMICILIO, UTI, UCO/);
   });
 });
 

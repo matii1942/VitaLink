@@ -38,6 +38,11 @@ services:
     restart: unless-stopped
     environment:
       LEGACY_SOAP_PORT: 8080
+      # How big a hospital to simulate. 25 is a demo; a few hundred is what you
+      # want before measuring a query, because PostgreSQL will quite correctly
+      # ignore an index on a table small enough to read whole.
+      LEGACY_SIM_PATIENTS: ${LEGACY_SIM_PATIENTS:-25}
+      LEGACY_SIM_SEED: ${LEGACY_SIM_SEED:-42}
     ports:
       - "${LEGACY_SOAP_PORT:-8080}:8080"
     healthcheck:

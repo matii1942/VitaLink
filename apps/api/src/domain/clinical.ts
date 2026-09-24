@@ -13,6 +13,24 @@ export type SourceUnit = 'emergency' | 'theatre' | 'cathlab' | 'transfer';
 export type RespiratorySupport = 'room-air' | 'cannula' | 'mask' | 'cpap' | 'niv';
 export type News2Scale = 1 | 2;
 
+/** The two units a general ward escalates to. See ADR 0009. */
+export type CriticalCareUnit = 'intensive-care' | 'coronary-care';
+
+/** Where the patient went when the admission ended. */
+export type DischargeDestination = 'home' | CriticalCareUnit;
+
+/**
+ * A critical care bed asked for, and the moment the ward asked.
+ *
+ * It survives the admission: after the patient has gone it is the record of
+ * when the ward saw it coming, which is the question any review of a
+ * deterioration starts from.
+ */
+export interface CriticalCareRequest {
+  unit: CriticalCareUnit;
+  requestedAt: Date;
+}
+
 export interface Patient {
   mrn: string;
   nationalId: string | null;
@@ -29,7 +47,15 @@ export interface Admission {
   admissionId: string;
   mrn: string;
   admittedAt: Date;
+  /**
+   * Null while the patient is still in a bed here — including while they are
+   * waiting for a critical care bed, which is a patient who has not left.
+   */
   dischargedAt: Date | null;
+  /** Null exactly when dischargedAt is null. The normaliser enforces that. */
+  dischargeDestination: DischargeDestination | null;
+  /** Null when no critical care bed was ever asked for. */
+  criticalCareRequest: CriticalCareRequest | null;
   ward: string;
   admissionType: AdmissionType;
   sourceUnit: SourceUnit | null;

@@ -12,6 +12,7 @@ const DAY = 24 * 60 * 60 * 1000;
 
 const dataset = generateDataset({ patientCount: 300, seed: 7, now: NOW });
 const patientsByMrn = new Map(dataset.patients.map((p) => [p.mrn, p]));
+const admissionsById = new Map(dataset.admissions.map((a) => [a.admissionId, a]));
 
 function observationsByAdmission() {
   const map = new Map();
@@ -163,5 +164,95 @@ describe('observations', () => {
   it('includes some missing measurements', () => {
     const missingTemps = dataset.observations.filter((o) => o.temperature === null);
     expect(missingTemps.length).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * A general ward is not a critical care unit, so the data must not contain a
+ * patient whom a ward went on charting at a score that would have had them
+ * moved. See ADR 0009.
+ *
+ * These are invariants about the shape of the story, not about specific values:
+ * the generator never computes a NEWS2 score, and asserting one here would mean
+ * a second implementation of the chart living in the simulator.
+ */
+describe('escalation to critical care', () => {
+  const escalated = dataset.admissions.filter((a) => a.transferUnit !== null);
+
+  it('escalates a minority of admissions', () => {
+    expect(escalated.length).toBeGreaterThan(0);
+    expect(escalated.length).toBeLessThan(dataset.admissions.length * 0.2);
+  });
+
+  it('asks for the unit that ward escalates to', () => {
+    for (const a of escalated) {
+      const expected = a.ward === 'cardiology' ? 'coronary-care' : 'intensive-care';
+      expect(a.transferUnit).toBe(expected);
+    }
+  });
+
+  it('never asks for a bed before the patient arrived', () => {
+    const impossible = escalated.filter((a) => a.transferRequestedAt < a.admittedAt);
+    expect(impossible).toEqual([]);
+  });
+
+  it('never sends an escalated patient home', () => {
+    const home = escalated.filter((a) => a.dischargeDestination === 'home');
+    expect(home).toEqual([]);
+  });
+
+  it('either transfers the patient or leaves them in the ward waiting', () => {
+    for (const a of escalated) {
+      if (a.dischargedAt === null) {
+        // Still here, still on the ward board, waiting for a bed.
+        expect(a.dischargeDestination).toBeNull();
+      } else {
+        expect(a.dischargeDestination).toBe(a.transferUnit);
+        expect(a.dischargedAt.getTime()).toBeGreaterThan(a.transferRequestedAt.getTime());
+        expect(a.dischargedAt.getTime()).toBeLessThanOrEqual(NOW.getTime());
+      }
+    }
+  });
+
+  it('produces both endings somewhere in the dataset', () => {
+    expect(escalated.some((a) => a.dischargedAt === null)).toBe(true);
+    expect(escalated.some((a) => a.dischargedAt !== null)).toBe(true);
+  });
+
+  it('goes on charting at least one patient after the bed was asked for', () => {
+    const rounds = observationsByAdmission();
+    const waiting = escalated.filter((a) => a.dischargedAt === null);
+
+    const stillCharted = waiting.filter((a) =>
+      (rounds.get(a.admissionId) ?? []).some((o) => o.recordedAt > a.transferRequestedAt),
+    );
+
+    expect(stillCharted.length).toBeGreaterThan(0);
+  });
+
+  it('never leaves a confused patient unescalated', () => {
+    // Confusion scores 3 on its own, which is a red score. A confused patient
+    // whom nobody asked a bed for would be the exact record this ADR exists to
+    // keep out of the dataset.
+    const confused = dataset.observations.filter((o) => o.gcsEye !== null && o.gcsTotal < 15);
+
+    expect(confused.length).toBeGreaterThan(0);
+    for (const o of confused) {
+      expect(admissionsById.get(o.admissionId).transferUnit).not.toBeNull();
+    }
+  });
+
+  it('records where every patient who left went, and nowhere for those still here', () => {
+    for (const a of dataset.admissions) {
+      expect(a.dischargedAt === null).toBe(a.dischargeDestination === null);
+    }
+  });
+
+  it('only ever sends a patient home, to intensive care or to coronary care', () => {
+    const destinations = new Set(dataset.admissions.map((a) => a.dischargeDestination));
+    destinations.delete(null);
+    for (const destination of destinations) {
+      expect(['home', 'intensive-care', 'coronary-care']).toContain(destination);
+    }
   });
 });

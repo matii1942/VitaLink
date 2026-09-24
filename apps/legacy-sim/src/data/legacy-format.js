@@ -48,6 +48,20 @@ const ADMISSION_TYPE = {
   scheduled: 'PROG',
 };
 
+// The two units a general ward escalates to.
+const CRITICAL_CARE_UNIT = {
+  'intensive-care': 'UTI',
+  'coronary-care': 'UCO',
+};
+
+// Where the patient went when the admission closed. The hospital records a
+// transfer to critical care with the same code as the unit itself.
+const DISCHARGE_DESTINATION = {
+  home: 'DOMICILIO',
+  'intensive-care': 'UTI',
+  'coronary-care': 'UCO',
+};
+
 // ---------------------------------------------------------------------------
 // Scalar conversions
 // ---------------------------------------------------------------------------
@@ -175,6 +189,9 @@ function toLegacyAdmission(admission) {
     sourceUnit: lookup(SOURCE_UNIT, admission.sourceUnit),
     diagnosis: admission.diagnosis,
     firstAdmission: toLegacyFlag(admission.firstAdmission),
+    transferUnit: lookup(CRITICAL_CARE_UNIT, admission.transferUnit),
+    transferRequestedAt: toLegacyDateTime(admission.transferRequestedAt),
+    dischargeDestination: lookup(DISCHARGE_DESTINATION, admission.dischargeDestination),
   };
 }
 

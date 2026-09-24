@@ -49,8 +49,15 @@ model Admission {
   mrn            String
   patient        Patient       @relation(fields: [mrn], references: [mrn])
   admittedAt     DateTime      @db.Timestamptz(3)
-  /// Null while the patient is still in a bed.
+  /// Null while the patient is still in a bed — including while they wait for
+  /// a critical care bed, which is a patient who has not left (ADR 0009).
   dischargedAt   DateTime?     @db.Timestamptz(3)
+  /// home | intensive-care | coronary-care. Null exactly when dischargedAt is.
+  dischargeDestination String?
+  /// intensive-care | coronary-care, when a critical care bed was asked for.
+  /// Kept after the admission ends: it records when the ward saw it coming.
+  transferUnit         String?
+  transferRequestedAt  DateTime? @db.Timestamptz(3)
   ward           String
   /// urgent | scheduled
   admissionType  String

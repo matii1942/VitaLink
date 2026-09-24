@@ -60,6 +60,14 @@
           <xsd:element name="diagnosis"      type="xsd:string" nillable="true"/>
           <!-- S (yes) | N (no) -->
           <xsd:element name="firstAdmission" type="xsd:string"/>
+          <!-- A critical care bed has been asked for. Both nil when it never was.
+               UTI (intensive care) | UCO (coronary care) -->
+          <xsd:element name="transferUnit"   type="xsd:string" nillable="true"/>
+          <!-- DD/MM/YYYY HH:MM, when the bed was asked for -->
+          <xsd:element name="transferRequestedAt" type="xsd:string" nillable="true"/>
+          <!-- Where the patient went. Nil while they are still in a bed here.
+               DOMICILIO (home) | UTI | UCO -->
+          <xsd:element name="dischargeDestination" type="xsd:string" nillable="true"/>
         </xsd:sequence>
       </xsd:complexType>
 

@@ -95,6 +95,9 @@ These are stated so that nobody mistakes a number VitaLink produces for more tha
 - **Hypertension below 220 mmHg scores 0.** This is a property of NEWS2, implemented as published. A score of 0 is not a finding that the pressure is fine.
 - **Long-standing low verbal responses read as new confusion.** Dementia, aphasia or motor neurone disease lower the Glasgow verbal score permanently, and the conversion reads it as C, adding 3 points at every round. A ward nurse reads a Glasgow against the patient's baseline; the source does not send one.
 - **Scores can be partial.** A missing measurement leaves its parameter unscored, and the score is marked as a lower bound. Over the simulated ward, roughly a third of scores are partial — every parameter goes missing only occasionally, but the gaps add up.
+- **Ward data stops where critical care begins.** An admission has three states: in a bed, waiting for a critical care bed, and ended with a recorded destination. A patient at or above the emergency response threshold for two consecutive rounds has a bed asked for, and stays on the board — above every score — until it appears. Measured over 600 simulated patients, no admission that was never escalated exceeds an aggregate of 9. Nothing here is validated against critical care physiology, and it is not meant to be. See [ADR 0009](docs/decisions/0009-ward-data-stops-at-critical-care.md).
+- **The ward board is one hand-written query, and it was measured rather than argued about.** A lateral join beats `DISTINCT ON` by 2.9× at 56 000 observations, and the gap widens with history; no index was added for it, because the sequential scan it would replace is 2.3% of the query. See [ADR 0010](docs/decisions/0010-ward-board-query-measured.md).
+- **The API never returns national identity numbers.** They are stored and matched on, and they stop at the service boundary while there is no authentication. See [ADR 0008](docs/decisions/0008-api-does-not-serve-national-ids.md).
 - **Two dependency advisories are accepted.** `npm audit` reports four high-severity issues from the Prisma CLI; none is reachable in this project. See [ADR 0007](docs/decisions/0007-accepted-dependency-advisories.md).
 
 ## Tech stack
@@ -117,8 +120,9 @@ These are stated so that nobody mistakes a number VitaLink produces for more tha
 git clone https://github.com/matii1942/VitaLink.git
 cd VitaLink
 
-cp .env.example .env              # PowerShell: Copy-Item .env.example .env
-docker compose up -d --build      # PostgreSQL and the hospital simulator
+cp .env.example .env                        # PowerShell: Copy-Item .env.example .env
+cp .env.test.example .env.test              # only needed to run the tests
+docker compose up -d --build                # PostgreSQL and the hospital simulator
 
 cd apps/api
 npm ci
@@ -139,24 +143,41 @@ curl -X POST http://localhost:3000/sync     # PowerShell: Invoke-RestMethod -Met
 | `http://localhost:3000/health` | API health check |
 | `POST http://localhost:3000/sync` | Runs a synchronisation |
 | `http://localhost:3000/sync/runs` | The ten most recent runs |
+| `http://localhost:3000/patients` | Patients, paginated: `?page=1&pageSize=25` |
+| `http://localhost:3000/patients/{mrn}` | One patient with their admission history |
+| `http://localhost:3000/admissions` | Admissions, filterable: `?ward=surgery&active=true` |
+| `http://localhost:3000/admissions/{id}/observations` | Vital signs with their NEWS2 score: `?order=asc` |
+| `http://localhost:3000/wards` | The wards, with how many beds are occupied |
+| `http://localhost:3000/wards/{ward}/board` | Everyone in the ward with their latest score, most concerning first |
 
 `npx prisma studio`, from `apps/api`, opens a browser view of the database.
+
+The simulated hospital's size and seed are configuration, not code:
+`LEGACY_SIM_PATIENTS` and `LEGACY_SIM_SEED` in `.env`. The default 25 patients
+is a demo. Raise it to a few hundred before measuring a query — on a table small
+enough to read whole, PostgreSQL ignores every index, quite correctly, and the
+plan you measure is not the plan you would run.
 
 ## Testing
 
 ```bash
 cd apps/api
-npm test            # unit tests
-npm run test:e2e    # boots the application and drives it over HTTP
+npm test            # unit tests — no database, no network
+npm run test:e2e    # boots the application against a real PostgreSQL
 npm run test:cov    # unit tests with a coverage report
 
 cd ../legacy-sim
 npm test            # generator, legacy format, and the SOAP service over real SOAP
 ```
 
+The end-to-end tests use a second database, `vitalink_test`, on the same
+PostgreSQL container. They create it and apply the migrations on first run, and
+empty every table between test cases — which is why they refuse to start unless
+the database name ends in `_test`. `.env.test` is what points them at it.
+
 The NEWS2 engine is a pure module — vital signs in, score out, no database or clock — which is what makes exhaustive testing possible. It has 80 tests, including one on each side of every band boundary, because in a clinical score the errors live at the edges. The normaliser's tests run against records captured from the simulator's actual output, not invented ones.
 
-CI runs both packages in parallel on every push, and builds the simulator's Docker image from a clean checkout. Integration tests against a real PostgreSQL instance come with Sprint 3.
+CI runs both packages in parallel on every push, and builds the simulator's Docker image from a clean checkout. The API job starts its own PostgreSQL container, so the end-to-end tests run against a real database there too, not a mock.
 
 ## Roadmap
 
@@ -165,7 +186,7 @@ CI runs both packages in parallel on every push, and builds the simulator's Dock
 | 0 | Repository, Docker, CI, health endpoint | ✅ |
 | 1 | Simulated hospital: WSDL, SOAP service, synthetic data generator | ✅ |
 | 2 | SOAP client, normaliser, NEWS2 engine, Prisma, synchronisation | ✅ |
-| 3 | REST API for consumers, integration tests on PostgreSQL, query optimisation | next |
+| 3 | REST API for consumers, integration tests on PostgreSQL, query optimisation | ✅ |
 | 4 | AWS deployment, scheduled sync, infrastructure as code | |
 | 5 | Clinical summaries with token-budgeted LLM calls | |
 | 6 | React ward dashboard | |

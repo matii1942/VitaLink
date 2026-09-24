@@ -9,6 +9,7 @@ const {
   toLegacyTemp,
   toLegacySexCode,
   toLegacyObservation,
+  toLegacyAdmission,
 } = legacy;
 
 describe('dates', () => {
@@ -106,5 +107,72 @@ describe('observation codes', () => {
 
   it('refuses a support mode the hospital has no code for', () => {
     expect(() => toLegacyObservation({ ...base, respSupport: 'psv' })).toThrow(/No legacy code/);
+  });
+});
+
+describe('admissions', () => {
+  const base = {
+    admissionId: 'ADM-000001',
+    mrn: 'MRN-000001',
+    admittedAt: new Date('2026-09-20T17:30:00Z'),
+    dischargedAt: null,
+    dischargeDestination: null,
+    transferUnit: null,
+    transferRequestedAt: null,
+    ward: 'internal-medicine',
+    admissionType: 'urgent',
+    sourceUnit: 'emergency',
+    diagnosis: 'Neumonia adquirida en la comunidad',
+    firstAdmission: true,
+  };
+
+  it('leaves the transfer fields null when no bed was ever asked for', () => {
+    const legacyRow = toLegacyAdmission(base);
+
+    expect(legacyRow.transferUnit).toBeNull();
+    expect(legacyRow.transferRequestedAt).toBeNull();
+    expect(legacyRow.dischargeDestination).toBeNull();
+  });
+
+  it('codes a discharge home as DOMICILIO', () => {
+    const legacyRow = toLegacyAdmission({
+      ...base,
+      dischargedAt: new Date('2026-09-22T13:00:00Z'),
+      dischargeDestination: 'home',
+    });
+
+    expect(legacyRow.dischargeDestination).toBe('DOMICILIO');
+    expect(legacyRow.dischargedAt).toBe('22/09/2026 10:00');
+  });
+
+  it('codes the two critical care units as UTI and UCO', () => {
+    const toIntensiveCare = toLegacyAdmission({
+      ...base,
+      transferUnit: 'intensive-care',
+      transferRequestedAt: new Date('2026-09-22T11:20:00Z'),
+      dischargedAt: new Date('2026-09-22T19:00:00Z'),
+      dischargeDestination: 'intensive-care',
+    });
+
+    expect(toIntensiveCare.transferUnit).toBe('UTI');
+    expect(toIntensiveCare.transferRequestedAt).toBe('22/09/2026 08:20');
+    expect(toIntensiveCare.dischargeDestination).toBe('UTI');
+
+    const toCoronaryCare = toLegacyAdmission({
+      ...base,
+      ward: 'cardiology',
+      transferUnit: 'coronary-care',
+      transferRequestedAt: new Date('2026-09-22T11:20:00Z'),
+    });
+
+    expect(toCoronaryCare.transferUnit).toBe('UCO');
+    // The bed was asked for and has not appeared: the patient is still here.
+    expect(toCoronaryCare.dischargeDestination).toBeNull();
+  });
+
+  it('refuses a destination it has no code for', () => {
+    expect(() => toLegacyAdmission({ ...base, dischargeDestination: 'morgue' })).toThrow(
+      /No legacy code/,
+    );
   });
 });

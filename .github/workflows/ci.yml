@@ -1,7 +1,6 @@
 # VitaLink CI — runs on every push to main and on every pull request.
 #
 # Two jobs, one per package, running in parallel.
-# Sprint 3 will add a PostgreSQL service container for integration tests.
 #
 
 name: CI
@@ -19,13 +18,38 @@ jobs:
     name: API — lint and test
     runs-on: ubuntu-latest
 
+    # A real PostgreSQL, started by the runner before the first step and
+    # thrown away after the last one. It is not our docker-compose service:
+    # GitHub starts it itself, on the same pinned image, and publishes port
+    # 5432 on the runner's localhost.
+    #
+    # The database is called vitalink_test, and the name matters: the test
+    # harness refuses to truncate a database whose name does not end in
+    # _test (see test/helpers/database.ts). That is the guard that stops a
+    # misconfigured DATABASE_URL from emptying a real database.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: vitalink
+          POSTGRES_PASSWORD: vitalink_ci
+          POSTGRES_DB: vitalink_test
+        ports:
+          - 5432:5432
+        # Without this the steps would start while PostgreSQL is still
+        # initialising and the first query would be refused. pg_isready is
+        # the same check docker-compose.yml uses.
+        options: >-
+          --health-cmd "pg_isready -U vitalink -d vitalink_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
     # The application refuses to start without these (see legacy.module.ts).
-    # Nothing in this job connects to either address: the database pool and
-    # the SOAP client both open on first use, and no test here uses them. They
-    # only have to be present and well-formed. Sprint 3 replaces them with a
-    # real PostgreSQL service container for integration tests.
+    # DATABASE_URL now points at a database that really exists. Nothing in
+    # this job talks SOAP, so LEGACY_SOAP_URL only has to be well-formed.
     env:
-      DATABASE_URL: postgresql://ci:ci@localhost:5432/ci?schema=public
+      DATABASE_URL: postgresql://vitalink:vitalink_ci@localhost:5432/vitalink_test?schema=public
       LEGACY_SOAP_URL: http://localhost:8080/hospital?wsdl
 
     defaults:
@@ -59,15 +83,23 @@ jobs:
       - name: Generate the Prisma client
         run: npx prisma generate
 
+      # Creates the tables in the service container above. The test harness
+      # does this too, so this step is not strictly required — it is here so
+      # that a broken migration fails in a step called "migrations" instead
+      # of somewhere inside a test run.
+      - name: Apply the migrations
+        run: npx prisma migrate deploy
+
       - name: Lint
         run: npm run lint
 
       - name: Test (unit)
         run: npm test
 
-      # The e2e suite boots the real Nest application and drives it over HTTP.
-      # It lives in its own Vitest config because it matches *.e2e-spec.ts,
-      # which `npm test` deliberately skips — so CI has to call it explicitly.
+      # The e2e suite boots the real Nest application, drives it over HTTP and
+      # reads and writes the real database. It lives in its own Vitest config
+      # because it matches *.e2e-spec.ts, which `npm test` deliberately skips
+      # — so CI has to call it explicitly.
       - name: Test (e2e)
         run: npm run test:e2e
 

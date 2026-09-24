@@ -64,7 +64,12 @@ function buildService(dataset) {
           return { patient: legacy.toLegacyPatient(patient) };
         },
 
-        ListAdmissions({ ward, activeOnly }) {
+        // Both filters are optional, and node-soap sends no body element at
+        // all when every field of the request is nil — so the arguments can
+        // arrive as null. A request with no filters is a valid request for
+        // every admission, not a server error.
+        ListAdmissions(args) {
+          const { ward, activeOnly } = args ?? {};
           const onlyActive = activeOnly === 'S';
 
           const admissions = dataset.admissions
@@ -132,9 +137,17 @@ function start({ port = 8080, seed = 42, patientCount = 25 } = {}) {
 if (require.main === module) {
   const port = Number(process.env.LEGACY_SOAP_PORT ?? 8080);
 
-  start({ port }).then(({ url, dataset }) => {
+  // How big a hospital to simulate, and which one. The seed belongs in
+  // configuration rather than in the code because "the same data as yesterday"
+  // and "a different hospital to measure against" are both things somebody
+  // needs, and neither should mean editing a source file.
+  const patientCount = Number(process.env.LEGACY_SIM_PATIENTS ?? 25);
+  const seed = Number(process.env.LEGACY_SIM_SEED ?? 42);
+
+  start({ port, patientCount, seed }).then(({ url, dataset }) => {
     console.log(`Hospital simulator listening on ${url}`);
     console.log(`  WSDL:          ${url}?wsdl`);
+    console.log(`  Dataset:       seed ${seed}`);
     console.log(
       `  Serving:       ${dataset.patients.length} patients, ` +
         `${dataset.admissions.length} admissions, ` +
