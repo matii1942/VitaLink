@@ -1,0 +1,7 @@
+# Copy to terraform.tfvars and fill in. terraform.tfvars is git-ignored.
+#
+#   Windows PowerShell:  Copy-Item terraform.tfvars.example terraform.tfvars
+#
+# Your current public address, as a /32:
+#   PowerShell:  (Invoke-RestMethod https://api.ipify.org)
+developer_ip = "203.0.113.4/32"

@@ -1,0 +1,16 @@
+# Terraform state. It holds the database password in clear text, so it never
+# goes near the repository. A team would keep it in S3 with locking; a solo
+# project keeps it here and knows why that is a limitation.
+*.tfstate
+*.tfstate.*
+.terraform/
+.build/
+.terraform.tfstate.lock.info
+
+# Real values, including the developer's own IP address.
+terraform.tfvars
+*.auto.tfvars
+!terraform.tfvars.example
+
+# The lock file IS committed: it pins provider versions so every machine
+# resolves the same ones.

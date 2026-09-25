@@ -23,6 +23,7 @@ reversed, a new record supersedes it and both stay.
 | [0008](0008-api-does-not-serve-national-ids.md) | The API does not serve national identity numbers | Accepted |
 | [0009](0009-ward-data-stops-at-critical-care.md) | Ward data stops where critical care begins | Accepted |
 | [0010](0010-ward-board-query-measured.md) | The ward board is one lateral join, and carries no extra index | Accepted |
+| [0011](0011-lambda-keeps-the-fast-query-compiler.md) | The deployment keeps Prisma's fast query compiler | Accepted |
 
 ## Template
 

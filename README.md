@@ -179,6 +179,16 @@ The NEWS2 engine is a pure module — vital signs in, score out, no database or 
 
 CI runs both packages in parallel on every push, and builds the simulator's Docker image from a clean checkout. The API job starts its own PostgreSQL container, so the end-to-end tests run against a real database there too, not a mock.
 
+## Deployment
+
+The deployment is Terraform, in [infra/](infra/): a VPC with no NAT gateway, RDS
+PostgreSQL, and the API and the synchronisation job as two Lambda functions
+behind a Function URL. It is built to be created, demonstrated and destroyed.
+
+The AWS account's setup — region, budget guardrails, free tier model and the
+costs worth knowing about — is recorded in [docs/aws-account.md](docs/aws-account.md).
+No credentials are in this repository.
+
 ## Roadmap
 
 | Sprint | Focus | |
@@ -190,6 +200,12 @@ CI runs both packages in parallel on every push, and builds the simulator's Dock
 | 4 | AWS deployment, scheduled sync, infrastructure as code | |
 | 5 | Clinical summaries with token-budgeted LLM calls | |
 | 6 | React ward dashboard | |
+
+## Working on this
+
+[CLAUDE.md](CLAUDE.md) records the standing agreements: the repository is in
+English and the conversation in castellano, measurements go into an ADR with
+their numbers, and every patient record is synthetic.
 
 ## About the data
 
