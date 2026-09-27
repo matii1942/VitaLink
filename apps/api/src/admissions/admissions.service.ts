@@ -56,6 +56,29 @@ export class AdmissionsService {
   }
 
   /**
+   * One admission, with its patient and how many observations it has.
+   *
+   * The same shape a row of the list has, deliberately. A detail screen that
+   * received a different object from the list it was reached through would
+   * make every consumer write the mapping twice.
+   */
+  async findOne(admissionId: string): Promise<AdmissionWithPatient> {
+    const row = await this.prisma.admission.findUnique({
+      where: { admissionId },
+      include: {
+        patient: true,
+        _count: { select: { observations: true } },
+      },
+    });
+
+    if (row === null) {
+      throw new NotFoundException(`No admission with id ${admissionId}.`);
+    }
+
+    return toAdmissionWithPatient(row, row._count.observations, new Date());
+  }
+
+  /**
    * The vital signs of one admission, each with its NEWS2 score.
    *
    * Newest first by default, which is what a ward wants to see. Ascending is

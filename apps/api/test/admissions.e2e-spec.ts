@@ -1,11 +1,17 @@
 /**
- * GET /admissions and GET /admissions/:admissionId/observations.
+ * GET /admissions, GET /admissions/:admissionId and its observations.
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import request from 'supertest';
 
 import { createTestApp, type TestApp } from './helpers/app.js';
-import { seedAdmission, seedObservation, seedPatient, seedScore } from './helpers/seed.js';
+import {
+  seedAdmission,
+  seedAdmittedPatient,
+  seedObservation,
+  seedPatient,
+  seedScore,
+} from './helpers/seed.js';
 
 describe('GET /admissions', () => {
   let testApp: TestApp;
@@ -462,5 +468,70 @@ describe('GET /admissions, critical care', () => {
     const { body } = await request(testApp.server).get('/admissions?active=true').expect(200);
 
     expect(body.total).toBe(1);
+  });
+});
+
+describe('GET /admissions/:admissionId', () => {
+  let testApp: TestApp;
+
+  beforeAll(async () => {
+    testApp = await createTestApp();
+  });
+
+  beforeEach(async () => {
+    await testApp.reset();
+  });
+
+  afterAll(async () => {
+    await testApp.close();
+  });
+
+  it('answers 404 for an admission that does not exist', async () => {
+    await request(testApp.server).get('/admissions/ADM-nope').expect(404);
+  });
+
+  it('returns the admission with its patient and observation count', async () => {
+    const { admissionId, mrn } = await seedAdmittedPatient(testApp.prisma);
+    await seedObservation(testApp.prisma, { admissionId });
+
+    const { body } = await request(testApp.server).get(`/admissions/${admissionId}`).expect(200);
+
+    expect(body).toMatchObject({
+      admissionId,
+      mrn,
+      active: true,
+      ward: 'internal-medicine',
+      observationCount: 2,
+    });
+    expect(body.patient.mrn).toBe(mrn);
+  });
+
+  it('does not serve the national identity number here either', async () => {
+    // ADR 0008 is a rule about the API, not about one endpoint. A new route
+    // is exactly where such a rule quietly stops being true.
+    const { admissionId } = await seedAdmittedPatient(testApp.prisma, {
+      patient: { nationalId: '98765432' },
+    });
+
+    const { body } = await request(testApp.server).get(`/admissions/${admissionId}`).expect(200);
+
+    expect(JSON.stringify(body)).not.toContain('98765432');
+  });
+
+  it('reports a pending critical care bed on the admission itself', async () => {
+    const { admissionId } = await seedAdmittedPatient(testApp.prisma, {
+      admission: {
+        transferUnit: 'intensive-care',
+        transferRequestedAt: new Date('2026-09-02T08:00:00.000Z'),
+      },
+    });
+
+    const { body } = await request(testApp.server).get(`/admissions/${admissionId}`).expect(200);
+
+    expect(body.awaitingCriticalCare).toBe(true);
+    expect(body.criticalCareRequest).toEqual({
+      unit: 'intensive-care',
+      requestedAt: '2026-09-02T08:00:00.000Z',
+    });
   });
 });

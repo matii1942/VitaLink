@@ -39,6 +39,19 @@ export class AdmissionsController {
   }
 
   /** GET /admissions/:admissionId/observations?order=asc — 404 for an unknown admission. */
+  /**
+   * GET /admissions/:admissionId
+   *
+   * One admission with its patient. Registered before the observations route
+   * only for readability — Nest matches on the number of segments, so
+   * ":admissionId" cannot swallow ":admissionId/observations" or the summary
+   * route that the summaries module mounts underneath this same prefix.
+   */
+  @Get(':admissionId')
+  findOne(@Param('admissionId') admissionId: string): Promise<AdmissionWithPatient> {
+    return this.admissions.findOne(admissionId);
+  }
+
   @Get(':admissionId/observations')
   observations(
     @Param('admissionId') admissionId: string,

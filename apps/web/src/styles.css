@@ -373,3 +373,164 @@ a {
   font-size: 13px;
   margin-bottom: 12px;
 }
+
+/* --- patient detail ---------------------------------------------------- */
+
+.section {
+  margin-top: 20px;
+}
+
+.section h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+  font-size: 15px;
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: var(--gap);
+  margin: 0 0 4px;
+  padding: 0;
+}
+
+.fact dt {
+  color: var(--text-muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.fact dd {
+  margin: 2px 0 0;
+}
+
+.section h3 .flag[data-kind='current'] {
+  border-color: var(--risk-low);
+  color: var(--text-soft);
+  font-weight: 400;
+}
+
+.section h3 .flag[data-kind='stale'],
+.section h3 .flag[data-kind='unavailable'] {
+  border-color: var(--risk-low-medium);
+  color: var(--text-soft);
+  font-weight: 400;
+}
+
+.summary-text {
+  margin: 0 0 8px;
+  font-size: 16px;
+  line-height: 1.6;
+  max-width: 68ch;
+}
+
+/*
+ * The provenance line. Small, permanent, and never conditional: a reader who
+ * cannot tell at a glance that a machine wrote the paragraph above is a
+ * reader who will eventually quote it as a clinical finding (ADR 0012).
+ */
+.disclaimer {
+  margin: 12px 0 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--rule);
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.board th.num,
+.board td.num {
+  text-align: right;
+}
+
+/* --- the trend chart --------------------------------------------------- */
+
+.chart {
+  margin: 0;
+}
+
+.chart figcaption {
+  color: var(--text-muted);
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+
+.chart svg {
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+/* The data is the darkest thing in the frame; everything else recedes. */
+.chart .series {
+  fill: none;
+  stroke: #2a78d6;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.chart .marker {
+  fill: #2a78d6;
+  /* A ring in the surface colour keeps two close points from merging. */
+  stroke: var(--surface);
+  stroke-width: 2;
+}
+
+.chart .axis {
+  stroke: var(--rule);
+  stroke-width: 1;
+}
+
+.chart .threshold {
+  stroke: var(--text-muted);
+  stroke-width: 1;
+  stroke-dasharray: 3 4;
+}
+
+.chart .threshold-label,
+.chart .tick {
+  fill: var(--text-muted);
+  font-size: 11px;
+}
+
+.chart .tooltip rect {
+  fill: var(--text);
+  opacity: 0.92;
+}
+
+.chart .tooltip text {
+  fill: var(--surface);
+  font-size: 11px;
+}
+
+.chart .tooltip .tooltip-soft {
+  opacity: 0.75;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme='light'])) .chart .series {
+    stroke: #3987e5;
+  }
+
+  :root:where(:not([data-theme='light'])) .chart .marker {
+    fill: #3987e5;
+  }
+}
+
+/*
+ * A flag inside a fact needs a little air: the definition list packs its rows
+ * tightly, and a filled chip sitting flush against the label above it reads
+ * as part of the label.
+ */
+.fact dd .flag {
+  margin-top: 1px;
+}

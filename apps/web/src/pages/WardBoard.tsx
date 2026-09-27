@@ -141,8 +141,8 @@ export function WardBoard() {
       <table className="board">
         <caption>
           {shown.length === rows.length
-            ? `${rows.length} patients, ${data.orderedBy}.`
-            : `${shown.length} of ${rows.length} patients shown, ${data.orderedBy}.`}
+            ? `${patients(rows.length)}, ${data.orderedBy}.`
+            : `${shown.length} of ${patients(rows.length)} shown, ${data.orderedBy}.`}
         </caption>
         <thead>
           <tr>
@@ -224,6 +224,11 @@ function Row({ row }: { row: WardBoardRow }) {
       </td>
     </tr>
   );
+}
+
+/** "1 patient", "12 patients" — a ward of one is not a rendering bug. */
+function patients(count: number): string {
+  return `${count} ${count === 1 ? 'patient' : 'patients'}`;
 }
 
 function riskOf(row: WardBoardRow): string | null {
