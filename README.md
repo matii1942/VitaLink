@@ -2,7 +2,34 @@
 
 VitaLink connects a hospital's legacy patient system to modern clinical tooling. It pulls admissions and vital signs from a SOAP web service, normalises them into PostgreSQL, and scores every set of observations against the **NEWS2** early-warning standard — so that deterioration visible in the data is not left waiting for someone to notice it at shift change.
 
-> **Status:** Sprints 0–2 complete. The integration works end to end: a sync reads every admission from the hospital, stores it, and scores every observation. The REST API for consumers, the cloud deployment and the ward dashboard are next — see the [roadmap](#roadmap).
+> **Status:** complete, sprints 0 to 6. A synchronisation reads every admission from the hospital, scores every observation, and serves the result through a REST API, a clinical summary written by a language model, and a ward dashboard. It has been deployed to AWS with Terraform and torn down again — see the [roadmap](#roadmap).
+
+---
+
+## What it looks like
+
+The ward board answers one question at a glance: who needs attention first. The order is not the browser's opinion — it comes from the database, by a ranking that puts a patient waiting for a critical care bed above everyone, then sorts by NEWS2.
+
+![The ward board, ordered by acuity](docs/images/ward-board.png)
+
+Nothing here means anything by colour alone. The score is a number, the risk band is a word, and every flag carries its own text — because measured against the surface these render on, the *low-medium* and *medium* hues sit closer together than the threshold at which people with full colour vision can tell two colours apart, and that pair is exactly where the escalation threshold runs. Turn the screen to greyscale and the board reads identically.
+
+![The flags a ward board has to carry](docs/images/clinical-flags.png)
+
+Four of those flags are the clinical rules made visible:
+
+- **`red score`** — a single parameter at the extreme. NEWS2 escalates on it even when the total is low, which is why the third row here matters: an aggregate of 4, admitted for a urinary infection, and one number badly wrong.
+- **`scale assumed`** — the hospital never recorded this patient's NEWS2 scale, so VitaLink assumed Scale 1 and says so. The second row is a patient with an acute exacerbation of COPD, who is very likely Scale 2. The system is probably wrong about her saturation, and it is wrong *out loud* ([ADR 0003](docs/decisions/0003-news2-scale-is-received-not-inferred.md)).
+- **`lower bound`** — a parameter was missing, so the aggregate is a floor rather than a total.
+- **`awaiting intensive-care`** — a critical care bed has been asked for and has not appeared. That patient outranks every score on the board ([ADR 0009](docs/decisions/0009-ward-data-stops-at-critical-care.md)).
+
+One admission, in the order a handover is given: the summary first, the trend second, the rounds behind them last. Each layer can be checked against the one below it, which is the only reason a paragraph written by a language model is safe to put at the top.
+
+![One admission: summary, trend and every round](docs/images/patient-detail.png)
+
+The escalation thresholds on the trend are dashed hairlines labelled with words rather than coloured bands, so they survive greyscale, colour blindness and a black and white printout. Time runs to scale on the horizontal axis, because rounds are taken every four hours until somebody deteriorates and then every hour — spacing them evenly would flatten exactly the acceleration that matters.
+
+The summary card above reads *unavailable* because no API key is configured in this environment. That is the designed behaviour, not a failure: with no model, the endpoint says so and calls nothing.
 
 ---
 
@@ -22,7 +49,14 @@ VitaLink does not replace the legacy system. It reads from it, scores what it fi
 - **A NEWS2 engine** transcribed from the Royal College of Physicians chart and verified row by row against independent sources, with a test on both sides of every band boundary.
 - **A synchronisation job** that stores everything the hospital sends and scores every observation. Every write is keyed by the hospital's own identifier, so running it twice changes nothing. Every run is recorded, whether it succeeds or not.
 
+- **A REST API** serving patients, admissions, observations and a ward board, paginated, with the ward board written as one hand-measured SQL query.
+- **A clinical summary** for one admission, written by a language model from a fact sheet built out of the patient's own observations — where every figure in the generated text is checked against the figures it was given, and a summary containing one that was not is discarded rather than served.
+- **A ward dashboard** in React: the board, a patient detail with a NEWS2 trend, and filters that work on data already in the browser.
+- **A deployment**, as Terraform: a VPC with no NAT gateway, RDS PostgreSQL, the API and the synchronisation job as two Lambda functions, and an hourly schedule. Built to be created, demonstrated and destroyed.
+
 Verified end to end on 22 September 2026: a sync of the simulator's 25 patients stores 478 observations and scores all 478, with nothing rejected. Six consecutive runs leave the same 478 rows.
+
+Verified in AWS on 27 September 2026: the hourly schedule fired on its own at 02:00:35 UTC, thirty-five seconds after the hour, and a second complete run over the same data left the patient count at 25 rather than 50. An integration is proved twice — the first run says it works, the second says it does not duplicate, and the second is the one that matters for a job that will run 8 760 times a year unwatched.
 
 ## Architecture
 
@@ -41,7 +75,18 @@ Verified end to end on 22 September 2026: a sync of the simulator's 25 patients 
                                                     │  PostgreSQL 16            │
                                                     │  Patient · Admission      │
                                                     │  Observation · Score      │
-                                                    │  SyncRun                  │
+                                                    │  SyncRun · Summary        │
+                                                    │  LlmCall                  │
+                                                    └───────────────────────────┘
+
+┌──────────────────────┐        REST / JSON         ┌───────────────────────────┐
+│  web                 │ ◄───────────────────────── │  the same NestJS API      │
+│  React · Vite :5173  │   /wards/:ward/board       │                           │
+│  ward board          │   /admissions/:id          │   summaries module        │
+│  patient detail      │   /admissions/:id/summary  │     → fact sheet          │
+│                      │                            │     → budget gate         │
+└──────────────────────┘                            │     → language model      │
+                                                    │     → verification        │
                                                     └───────────────────────────┘
 ```
 
@@ -98,6 +143,9 @@ These are stated so that nobody mistakes a number VitaLink produces for more tha
 - **Ward data stops where critical care begins.** An admission has three states: in a bed, waiting for a critical care bed, and ended with a recorded destination. A patient at or above the emergency response threshold for two consecutive rounds has a bed asked for, and stays on the board — above every score — until it appears. Measured over 600 simulated patients, no admission that was never escalated exceeds an aggregate of 9. Nothing here is validated against critical care physiology, and it is not meant to be. See [ADR 0009](docs/decisions/0009-ward-data-stops-at-critical-care.md).
 - **The ward board is one hand-written query, and it was measured rather than argued about.** A lateral join beats `DISTINCT ON` by 2.9× at 56 000 observations, and the gap widens with history; no index was added for it, because the sequential scan it would replace is 2.3% of the query. See [ADR 0010](docs/decisions/0010-ward-board-query-measured.md).
 - **The API never returns national identity numbers.** They are stored and matched on, and they stop at the service boundary while there is no authentication. See [ADR 0008](docs/decisions/0008-api-does-not-serve-national-ids.md).
+- **The summary has never run against a real model.** Every part of the pipeline around it is tested — the fact sheet, the verification, the budget, the cache, the degradation — against a deterministic double. The provider's HTTP call is not, and neither is the rejection rate of the verifier, which is a number this project can query and has never measured.
+- **The verification makes an invented figure impossible, and invented prose merely unlikely.** It does not catch a number written as a word, or a wrong claim containing no numbers at all. That is stated in the code and in [ADR 0012](docs/decisions/0012-summaries-are-verified-derived-text.md), because a guard whose limits are unknown is worse than no guard.
+- **The deployed function URL has no authentication.** While no key is configured that is a page of synthetic patients; with a key it would be a public endpoint that spends money per request. The two must not be true at the same time, and the deployment checklist in [infra/README.md](infra/README.md) says so ([ADR 0015](docs/decisions/0015-summary-endpoint-is-a-read-through-cache.md)).
 - **Two dependency advisories are accepted.** `npm audit` reports four high-severity issues from the Prisma CLI; none is reachable in this project. See [ADR 0007](docs/decisions/0007-accepted-dependency-advisories.md).
 
 ## Tech stack
@@ -108,9 +156,12 @@ These are stated so that nobody mistakes a number VitaLink produces for more tha
 | Database | PostgreSQL 16, Prisma 7 with the `pg` driver adapter |
 | Integration | SOAP 1.1, WSDL, node-soap |
 | Hospital simulator | Node.js, CommonJS, Faker |
-| Testing | Vitest, Supertest |
-| Tooling | Docker Compose, GitHub Actions, oxlint |
-| *Planned* | AWS (Lambda, RDS, EventBridge, S3, CloudWatch), React dashboard |
+| Dashboard | React, Vite, React Router, plain CSS — no component framework |
+| Summaries | The provider's HTTP API through `fetch`, behind a port with a test double |
+| Cloud | AWS: Lambda, RDS, VPC, EventBridge Scheduler, CloudWatch, EC2 |
+| Infrastructure | Terraform |
+| Testing | Vitest, Supertest, Testing Library |
+| Tooling | Docker Compose, GitHub Actions, oxlint, esbuild |
 
 ## Running locally
 
@@ -131,11 +182,32 @@ npx prisma generate               # Prisma 7 no longer does this automatically
 npm run start:dev
 ```
 
-Then, from another terminal:
+Then, from another terminal, bring the patients across from the simulator:
 
 ```bash
 curl -X POST http://localhost:3000/sync     # PowerShell: Invoke-RestMethod -Method Post http://localhost:3000/sync
 ```
+
+And from a third, the dashboard:
+
+```bash
+cd apps/web
+npm ci
+npm run dev
+```
+
+`http://localhost:5173` — the ward list, the board, and a patient detail.
+
+The dashboard talks to `/api`, which the Vite dev server forwards to the API on
+port 3000. That forwarding is the reason no CORS headers exist anywhere in this
+project: the browser refuses to let a page served from one origin read a
+response from another, and rather than weakening the API to accommodate it, the
+dev server makes both look like one origin.
+
+The clinical summary needs a key from a language model provider in
+`ANTHROPIC_API_KEY`. Without one the endpoint still answers — it reports
+`unavailable` with the reason and calls nothing — so the rest of the
+application runs, and is tested, with no key and no cost.
 
 | Address | What it is |
 | --- | --- |
@@ -146,7 +218,9 @@ curl -X POST http://localhost:3000/sync     # PowerShell: Invoke-RestMethod -Met
 | `http://localhost:3000/patients` | Patients, paginated: `?page=1&pageSize=25` |
 | `http://localhost:3000/patients/{mrn}` | One patient with their admission history |
 | `http://localhost:3000/admissions` | Admissions, filterable: `?ward=surgery&active=true` |
+| `http://localhost:3000/admissions/{id}` | One admission with its patient |
 | `http://localhost:3000/admissions/{id}/observations` | Vital signs with their NEWS2 score: `?order=asc` |
+| `http://localhost:3000/admissions/{id}/summary` | The handover summary, with how fresh it is and what it cost |
 | `http://localhost:3000/wards` | The wards, with how many beds are occupied |
 | `http://localhost:3000/wards/{ward}/board` | Everyone in the ward with their latest score, most concerning first |
 
@@ -168,7 +242,13 @@ npm run test:cov    # unit tests with a coverage report
 
 cd ../legacy-sim
 npm test            # generator, legacy format, and the SOAP service over real SOAP
+
+cd ../web
+npm test            # the screens, against a stubbed fetch
 ```
+
+**358 tests**: 193 unit and 71 end to end in the API, 63 in the simulator, 31 in
+the dashboard.
 
 The end-to-end tests use a second database, `vitalink_test`, on the same
 PostgreSQL container. They create it and apply the migrations on first run, and
@@ -177,7 +257,22 @@ the database name ends in `_test`. `.env.test` is what points them at it.
 
 The NEWS2 engine is a pure module — vital signs in, score out, no database or clock — which is what makes exhaustive testing possible. It has 80 tests, including one on each side of every band boundary, because in a clinical score the errors live at the edges. The normaliser's tests run against records captured from the simulator's actual output, not invented ones.
 
-CI runs both packages in parallel on every push, and builds the simulator's Docker image from a clean checkout. The API job starts its own PostgreSQL container, so the end-to-end tests run against a real database there too, not a mock.
+CI runs the packages in parallel on every push, and builds the simulator's Docker image from a clean checkout. The API job starts its own PostgreSQL container, so the end-to-end tests run against a real database there too, not a mock. It also typechecks: nothing else in the pipeline reads types — oxlint does not, and Vitest transpiles with esbuild, which strips them without looking — so until that step existed, a type error in code no test imported went green all the way to a deployment.
+
+The dashboard's tests stub `fetch` rather than injecting a fake client, so they
+exercise the real request path: the URL that gets built, the status handling,
+the abort when a screen is left. A seam invented to make testing easy is a seam
+only the tests use. They earned their keep on the first run, catching two
+defects: the trend chart keyed its marks by the instant a round was recorded
+rather than by the observation identifier, so two rounds recorded in the same
+minute made React drop one of them; and a ward holding a single patient
+described it in the plural.
+
+The summary pipeline is tested without a network and without spending anything.
+The language model sits behind a port with a deterministic double on the other
+side, so the cache, the budget gate, the rejection of an invented figure and
+the degradation to a stale summary are all exercised for free. The one part
+that cannot be: the provider's HTTP call itself.
 
 ## Deployment
 
@@ -197,9 +292,9 @@ No credentials are in this repository.
 | 1 | Simulated hospital: WSDL, SOAP service, synthetic data generator | ✅ |
 | 2 | SOAP client, normaliser, NEWS2 engine, Prisma, synchronisation | ✅ |
 | 3 | REST API for consumers, integration tests on PostgreSQL, query optimisation | ✅ |
-| 4 | AWS deployment, scheduled sync, infrastructure as code | |
-| 5 | Clinical summaries with token-budgeted LLM calls | |
-| 6 | React ward dashboard | |
+| 4 | AWS deployment, scheduled sync, infrastructure as code | ✅ |
+| 5 | Clinical summaries with token-budgeted LLM calls | ✅ |
+| 6 | React ward dashboard | ✅ |
 
 ## Working on this
 
