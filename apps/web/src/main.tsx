@@ -9,10 +9,22 @@
  */
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { BrowserRouter } from 'react-router-dom';
+import { BrowserRouter, HashRouter } from 'react-router-dom';
 
 import { App } from './App';
+import { IS_DEMO } from './demo/demo';
 import './styles.css';
+
+/**
+ * Two routers, one reason.
+ *
+ * BrowserRouter puts the route in the path, which needs a server that answers
+ * every path with index.html. The demo is a folder of static files on a host
+ * that knows nothing about this application's routes, so a reload of
+ * /admissions/ADM-000016 there would be a 404 from the host before React ever
+ * ran. HashRouter puts the route after a #, which no server ever sees.
+ */
+const Router = IS_DEMO ? HashRouter : BrowserRouter;
 
 const container = document.getElementById('root');
 
@@ -22,8 +34,8 @@ if (container === null) {
 
 createRoot(container).render(
   <StrictMode>
-    <BrowserRouter>
+    <Router>
       <App />
-    </BrowserRouter>
+    </Router>
   </StrictMode>,
 );

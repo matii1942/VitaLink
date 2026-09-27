@@ -1,0 +1,87 @@
+# Publishes the ward dashboard's demo build to GitHub Pages.
+#
+# The demo is a folder of static files with a recorded snapshot of the API
+# inside it (ADR 0016). There is no server, no database and no key behind the
+# published page — which is the reason it can be published at all, and the
+# reason it costs nothing to leave up.
+#
+# One-time setup in the repository: Settings → Pages → Source: GitHub Actions.
+
+name: Demo
+
+on:
+  push:
+    branches: [main]
+    # Only when something the demo is made of actually changed.
+    paths:
+      - 'apps/web/**'
+      - '.github/workflows/demo.yml'
+  # And on request, which is how the snapshot gets republished after it is
+  # re-recorded.
+  workflow_dispatch:
+
+# The token this workflow needs, and nothing else: write to Pages, and an
+# identity token for the deployment to prove it came from this run.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time. A second push while the first is publishing
+# waits rather than racing it; cancel-in-progress is deliberately false,
+# because cancelling half of a deployment leaves the page in the half.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build the demo
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: apps/web
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Publishing something the tests have not passed is how a broken demo
+      # ends up on a CV.
+      - name: Test
+        run: npm test
+
+      # --base ./ and the hash router (see src/main.tsx) are what make the
+      # output work from a project subpath without knowing what it is.
+      - name: Build
+        run: npm run build:demo
+
+      - name: Upload the built site
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: apps/web/dist-demo
+
+  deploy:
+    name: Publish to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4

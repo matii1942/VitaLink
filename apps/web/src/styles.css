@@ -407,6 +407,21 @@ a {
   margin: 2px 0 0;
 }
 
+/*
+ * A grid track is only as narrow as its narrowest item allows, and a chip is
+ * one unbreakable item. Without this, "awaiting intensive-care · 3 d ago"
+ * pushes its own column wider than the track and sits on top of the next
+ * fact. min-width lets the track shrink; letting the chip wrap is what stops
+ * it needing to.
+ */
+.fact {
+  min-width: 0;
+}
+
+.fact dd .flag {
+  white-space: normal;
+}
+
 .section h3 .flag[data-kind='current'] {
   border-color: var(--risk-low);
   color: var(--text-soft);
@@ -533,4 +548,28 @@ a {
  */
 .fact dd .flag {
   margin-top: 1px;
+}
+
+/*
+ * The demo notice.
+ *
+ * Rendered only by the demo build, and styled to be read rather than
+ * skipped: a left rule and the page's own muted text, not a coloured alert
+ * box. An alert box is something a reader learns to dismiss, and this is the
+ * one paragraph on the page that has to be believed.
+ */
+.demo-notice {
+  margin: 0 0 var(--gap);
+  padding: 10px 14px;
+  border-left: 3px solid var(--risk-low-medium);
+  background: var(--surface);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  color: var(--text-soft);
+  font-size: 13px;
+  line-height: 1.5;
+  max-width: 80ch;
+}
+
+.demo-notice strong {
+  color: var(--text);
 }

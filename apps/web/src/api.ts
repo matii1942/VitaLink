@@ -8,6 +8,8 @@
  */
 import { useEffect, useState } from 'react';
 
+import { demoGet, DemoMiss, IS_DEMO } from './demo/demo';
+
 /**
  * Empty in development: requests go to /api, which the dev server forwards
  * to the API (see vite.config.ts). Set VITE_API_URL to point a built site at
@@ -26,6 +28,22 @@ export class ApiError extends Error {
 }
 
 export async function get<T>(path: string, signal?: AbortSignal): Promise<T> {
+  // The demo build has no server to talk to. The substitution is here, at the
+  // single place a request leaves the application, so that everything above —
+  // the hook, the cancellation, the loading and error states, every screen —
+  // is the same code in both builds.
+  if (IS_DEMO) {
+    try {
+      return await demoGet<T>(path, signal);
+    } catch (error: unknown) {
+      if (error instanceof DemoMiss) {
+        throw new ApiError(error.message, error.status);
+      }
+
+      throw error;
+    }
+  }
+
   const response = await fetch(`${BASE}${path}`, {
     headers: { accept: 'application/json' },
     signal,

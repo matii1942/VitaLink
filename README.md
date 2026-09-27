@@ -4,6 +4,8 @@ VitaLink connects a hospital's legacy patient system to modern clinical tooling.
 
 > **Status:** complete, sprints 0 to 6. A synchronisation reads every admission from the hospital, scores every observation, and serves the result through a REST API, a clinical summary written by a language model, and a ward dashboard. It has been deployed to AWS with Terraform and torn down again — see the [roadmap](#roadmap).
 
+> **Try it:** **[the ward board, live](https://matii1942.github.io/VitaLink/)** — the real dashboard reading a recorded snapshot of the real API. Synthetic patients, no server, no cost. Why it is a recording and not a deployment: [ADR 0016](docs/decisions/0016-the-public-demo-is-a-recorded-snapshot.md).
+
 ---
 
 ## What it looks like
@@ -29,7 +31,7 @@ One admission, in the order a handover is given: the summary first, the trend se
 
 The escalation thresholds on the trend are dashed hairlines labelled with words rather than coloured bands, so they survive greyscale, colour blindness and a black and white printout. Time runs to scale on the horizontal axis, because rounds are taken every four hours until somebody deteriorates and then every hour — spacing them evenly would flatten exactly the acceleration that matters.
 
-The summary card above reads *unavailable* because no API key is configured in this environment. That is the designed behaviour, not a failure: with no model, the endpoint says so and calls nothing.
+The summary card above reads *unavailable* because no API key is configured in this environment. That is the designed behaviour, not a failure: with no model, the endpoint says so and calls nothing. The [live demo](https://matii1942.github.io/VitaLink/) shows the other branch: a written handover for every patient, each one through the real fact sheet, the real budget gate and the real verifier.
 
 ---
 
@@ -247,7 +249,7 @@ cd ../web
 npm test            # the screens, against a stubbed fetch
 ```
 
-**358 tests**: 193 unit and 71 end to end in the API, 63 in the simulator, 31 in
+**368 tests**: 193 unit and 71 end to end in the API, 63 in the simulator, 41 in
 the dashboard.
 
 The end-to-end tests use a second database, `vitalink_test`, on the same

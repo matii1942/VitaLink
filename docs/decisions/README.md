@@ -24,6 +24,11 @@ reversed, a new record supersedes it and both stay.
 | [0009](0009-ward-data-stops-at-critical-care.md) | Ward data stops where critical care begins | Accepted |
 | [0010](0010-ward-board-query-measured.md) | The ward board is one lateral join, and carries no extra index | Accepted |
 | [0011](0011-lambda-keeps-the-fast-query-compiler.md) | The deployment keeps Prisma's fast query compiler | Accepted |
+| [0012](0012-summaries-are-verified-derived-text.md) | A summary is derived text, and every figure in it is verified | Accepted |
+| [0013](0013-summary-cache-follows-observations.md) | The summary cache is invalidated by observation, not by clock | Accepted |
+| [0014](0014-model-prices-are-configuration.md) | Model prices are configuration, and the budget is checked before the call | Accepted |
+| [0015](0015-summary-endpoint-is-a-read-through-cache.md) | The summary is a read-through cache behind a GET, and that GET is open | Accepted |
+| [0016](0016-the-public-demo-is-a-recorded-snapshot.md) | The public demo is a recorded snapshot, not a deployment | Accepted |
 
 ## Template
 

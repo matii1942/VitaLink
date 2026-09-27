@@ -17,7 +17,20 @@
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 
-export default defineConfig({
+/**
+ * `mode` is what `--mode demo` sets, and it is the only switch the demo
+ * build needs.
+ *
+ * The flag is defined here rather than in a .env file so that there is one
+ * fewer file to keep in step, and so that nothing about the demo depends on
+ * an environment variable being set correctly on whatever machine builds it.
+ * `define` performs a literal substitution at build time, which is also what
+ * lets the bundler drop the branch that is not taken.
+ */
+export default defineConfig(({ mode }) => ({
+  define: {
+    'import.meta.env.VITE_DEMO': JSON.stringify(mode === 'demo' ? '1' : ''),
+  },
   plugins: [react()],
   server: {
     port: 5173,
@@ -37,4 +50,4 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/test-setup.ts'],
   },
-});
+}));

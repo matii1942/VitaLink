@@ -13,6 +13,7 @@ node_modules/
 # --- build output ---
 dist/
 dist-lambda/
+dist-demo/
 build/
 *.tsbuildinfo
 
@@ -29,8 +30,10 @@ npm-debug.log*
 .idea/
 
 # --- notas personales ---
-# El cuaderno de aprendizaje es para mí, no para el repositorio público.
+# El cuaderno de aprendizaje y la guía de estudio son para mí, no para el
+# repositorio público.
 NOTAS-DE-APRENDIZAJE.md
+GUIA-DE-ESTUDIO.md
 
 # --- os ---
 .DS_Store
