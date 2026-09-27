@@ -96,3 +96,19 @@ every few days. When the migrations stop connecting, that is why.
 **The schedule ships disabled.** The functions have no route to the internet,
 and the hospital simulator is not inside this VPC yet, so an enabled schedule
 would fail every hour for ever.
+
+## Before deploying Sprint 5
+
+The summary endpoint spends money per call and the function URL is public.
+Those two facts must not be true at the same time (ADR 0015).
+
+- [ ] Put a shared secret in front of the function URL, checked in a guard,
+      and keep it out of the repository and out of `terraform.tfvars`.
+- [ ] Only then set `ANTHROPIC_API_KEY` in the deployed environment. Until it
+      is set, the endpoint answers `unavailable` with a reason and calls
+      nothing, which is a safe thing to deploy.
+- [ ] Re-check the token prices in `.env.example` against the provider's
+      pricing page. A stale price makes every budget decision wrong while
+      nothing appears to fail (ADR 0014).
+- [ ] Confirm `LLM_MONTHLY_BUDGET_USD` is set in the deployed environment. It
+      defaults to 5, and a default is not a decision.

@@ -8,6 +8,7 @@ import { AppService } from './app.service.js';
 import { HealthModule } from './health/health.module.js';
 import { PatientsModule } from './patients/patients.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
+import { SummariesModule } from './summaries/summaries.module.js';
 import { SyncModule } from './sync/sync.module.js';
 import { WardsModule } from './wards/wards.module.js';
 
@@ -18,6 +19,7 @@ import { WardsModule } from './wards/wards.module.js';
     PatientsModule,
     AdmissionsModule,
     WardsModule,
+    SummariesModule,
     SyncModule,
   ],
   controllers: [AppController],

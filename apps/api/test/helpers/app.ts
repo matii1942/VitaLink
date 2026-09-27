@@ -9,7 +9,7 @@
  * that writes rows and a request that reads them use one connection pool.
  */
 import type { INestApplication } from '@nestjs/common';
-import { Test } from '@nestjs/testing';
+import { Test, type TestingModuleBuilder } from '@nestjs/testing';
 import type { Server } from 'node:http';
 
 import { AppModule } from '../../src/app.module.js';
@@ -31,10 +31,29 @@ export interface TestApp {
   close(): Promise<void>;
 }
 
-export async function createTestApp(): Promise<TestApp> {
-  const moduleFixture = await Test.createTestingModule({
-    imports: [AppModule],
-  }).compile();
+/**
+ * A provider to swap out before the application is built.
+ *
+ * There is exactly one thing in VitaLink that cannot be exercised for real in
+ * a test: the language model, which costs money and answers differently every
+ * time. Everything else — the database, the scorer, the SOAP client against
+ * its simulator — runs as it runs in production, because a test against a
+ * substitute proves that the substitute works.
+ */
+export interface ProviderOverride {
+  /** Exactly what Nest accepts as an injection token, and nothing else. */
+  token: Parameters<TestingModuleBuilder['overrideProvider']>[0];
+  useValue: unknown;
+}
+
+export async function createTestApp(overrides: ProviderOverride[] = []): Promise<TestApp> {
+  let builder = Test.createTestingModule({ imports: [AppModule] });
+
+  for (const override of overrides) {
+    builder = builder.overrideProvider(override.token).useValue(override.useValue);
+  }
+
+  const moduleFixture = await builder.compile();
 
   const app = moduleFixture.createNestApplication();
   await app.init();

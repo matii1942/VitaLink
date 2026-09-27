@@ -66,6 +66,7 @@ model Admission {
   diagnosis      String?
   firstAdmission Boolean
   observations   Observation[]
+  summary        Summary?
   createdAt      DateTime      @default(now()) @db.Timestamptz(3)
   updatedAt      DateTime      @updatedAt @db.Timestamptz(3)
 
@@ -156,4 +157,81 @@ model SyncRun {
   errors               Json?
 
   @@index([startedAt])
+}
+
+/// One call to the language model, successful or not. This table is the
+/// ledger the budget is read from: the spend for a month is a SUM over these
+/// rows, not a counter kept somewhere else that can drift away from reality.
+///
+/// A failed call is written too. A request that was billed by the provider
+/// and then failed on the way back still cost money, and a budget that counts
+/// only the successes lies in exactly the situation where it matters.
+model LlmCall {
+  id            String   @id @default(uuid())
+  /// summary — the only purpose today. Recorded so that a second use of the
+  /// model can be told apart in the ledger without a migration.
+  purpose       String
+  /// What the call was about — an admission identifier, today. Deliberately
+  /// not a foreign key: the ledger outlives the rows it describes, and a
+  /// discharged admission must not be able to take its cost off the books.
+  subjectId     String?
+  model         String
+  promptVersion String
+  inputTokens   Int      @default(0)
+  outputTokens  Int      @default(0)
+  /// Cost in millionths of a United States dollar, as a whole number.
+  ///
+  /// Money is never stored as a floating point number: 0.1 + 0.2 is not 0.3
+  /// in binary, and a budget is a comparison against a threshold. One call of
+  /// this size costs a fraction of a cent, so cents are too coarse to add up
+  /// — at four decimal places a whole month would round to zero. An integer
+  /// count of millionths adds exactly, needs no decimal library, and survives
+  /// a trip through JSON unchanged.
+  costMicroUsd  Int      @default(0)
+  /// succeeded | rejected | failed
+  /// rejected — the model answered, and the answer failed verification.
+  status        String
+  error         String?
+  /// Wall clock for the call, in milliseconds. A provider that has become
+  /// slow is visible here before it is visible anywhere else.
+  durationMs    Int
+
+  createdAt     DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([createdAt])
+}
+
+/// The clinical summary currently in force for one admission.
+///
+/// Derived text, never a source of truth. Everything it says has to be
+/// present already in the observations it was built from; a summary that
+/// cannot be traced back to them is discarded rather than served (ADR 0012).
+///
+/// One row per admission, replaced in place. A history of summaries would be
+/// a history of sentences about facts that are themselves already stored with
+/// their own history. The observations are the record; this is a reading of
+/// them, and only the current reading is worth keeping.
+model Summary {
+  admissionId          String    @id
+  admission            Admission @relation(fields: [admissionId], references: [admissionId], onDelete: Cascade)
+  text                 String
+
+  /// The watermark, and the whole of the cache policy.
+  ///
+  /// The most recent observation this summary had in front of it. The summary
+  /// is stale when the admission has an observation newer than this one — and
+  /// never merely because time passed. A stable patient does not become
+  /// different by waiting; they become different when someone takes their
+  /// vital signs again (ADR 0013).
+  throughObservationId String
+  throughRecordedAt    DateTime  @db.Timestamptz(3)
+
+  /// How many rounds of observations went into the prompt. Bounding this is
+  /// what bounds the cost of a call, so it is recorded with the result.
+  roundsUsed           Int
+  model                String
+  /// Which prompt produced this text. A changed prompt is a changed output,
+  /// and without this there is no way to find the summaries the old one wrote.
+  promptVersion        String
+  generatedAt          DateTime  @default(now()) @db.Timestamptz(3)
 }

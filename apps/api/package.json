@@ -12,6 +12,7 @@
   },
   "scripts": {
     "build": "nest build",
+    "prisma:generate": "prisma generate --no-hints",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
     "start:dev": "nest start --watch",
