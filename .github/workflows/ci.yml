@@ -90,6 +90,13 @@ jobs:
       - name: Apply the migrations
         run: npx prisma migrate deploy
 
+      # Nothing else in this pipeline checks types. oxlint does not read them,
+      # and Vitest transpiles with esbuild, which strips them without looking.
+      # Until this step existed, a type error in code that no test imports —
+      # the Lambda handlers, for one — went green all the way to a deployment.
+      - name: Typecheck
+        run: npm run typecheck
+
       - name: Lint
         run: npm run lint
 
