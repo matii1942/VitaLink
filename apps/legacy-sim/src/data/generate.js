@@ -26,6 +26,21 @@ const { fakerES: faker } = require('@faker-js/faker');
 const SCALE_2_SHARE = 0.15;
 const SCALE_2_MIN_AGE = 55;
 
+// The share of patients whose scale was never written down.
+//
+// The field arrived on the admission form years after the ward started using
+// it, and nobody went back to fill it in for the records that predate it. So
+// the hospital sends nothing, and VitaLink has to decide what to do with a
+// patient whose scale it does not know (ADR 0003: assume 1, record that the
+// assumption was made, and never silently present it as recorded fact).
+//
+// This is modelled as a records problem, not a clinical one: the patient has
+// a real scale either way. `trueScale` keeps it, so a Scale 2 patient with an
+// unrecorded scale still breathes like a Scale 2 patient — which is exactly
+// the case the assumption gets wrong, and exactly the case worth having in
+// the data.
+const SCALE_UNRECORDED_SHARE = 0.08;
+
 /**
  * Builds `count` patients.
  *
@@ -44,6 +59,11 @@ function generatePatients(count, now) {
       { value: 'unknown', weight: 2 },
     ]);
 
+    const trueScale =
+      age >= SCALE_2_MIN_AGE && faker.datatype.boolean({ probability: SCALE_2_SHARE }) ? 2 : 1;
+
+    const scaleRecorded = !faker.datatype.boolean({ probability: SCALE_UNRECORDED_SHARE });
+
     patients.push({
       // Medical record numbers are handed out in sequence, not at random.
       mrn: `MRN-${String(i + 1).padStart(6, '0')}`,
@@ -58,11 +78,12 @@ function generatePatients(count, now) {
       birthDate,
       sex,
 
-      news2Scale:
-        age >= SCALE_2_MIN_AGE &&
-        faker.datatype.boolean({ probability: SCALE_2_SHARE })
-          ? 2
-          : 1,
+      // What the hospital knows, which is not always what is true.
+      news2Scale: scaleRecorded ? trueScale : null,
+
+      // What is true. Never leaves this process: toLegacyPatient names every
+      // field it sends, and this is not one of them.
+      trueScale,
     });
   }
 
@@ -222,7 +243,7 @@ const DISCHARGED_SHARE = 0.3;
  */
 function generateAdmissions(patients, now) {
   return patients.map((patient, i) => {
-    const isCopd = patient.news2Scale === 2;
+    const isCopd = patient.trueScale === 2;
 
     const ward = isCopd
       ? 'internal-medicine'
@@ -369,6 +390,37 @@ const CRITICAL_CARE_UNIT = {
 // gets tachypnoeic, hypoxic, tachycardic, hypotensive and febrile together,
 // which is precisely why an aggregate score detects what a single number
 // misses.
+// The patient the red score rule exists for.
+//
+// NEWS2 escalates on a single parameter scoring 3 even when the total is
+// low, and that rule has a face: the person who looks well, adds up to 3 or
+// 4, and has one number that is badly wrong. A pulse of 38. A temperature of
+// 35.0. Twenty-six breaths a minute in somebody otherwise unremarkable.
+//
+// The simulator did not produce that patient. It deteriorates people as a
+// whole — respiration, saturation and pulse move together — so by the time
+// any parameter reached 3 the total was already past 7 and the patient read
+// as high risk. An entire clinical band, low-medium, existed in the scoring
+// engine, in its tests and in the ward board's filters, and never once in the
+// data. The board proved it: nought out of 1 025.
+//
+// These are chronic findings, so they persist round after round rather than
+// appearing once, and they are only given to patients who are not
+// deteriorating — pinning a pulse low while somebody declines would trade one
+// unrealistic dataset for another.
+const ISOLATED_OUTLIER_SHARE = 0.12;
+
+const ISOLATED_OUTLIERS = [
+  // Chronic bradycardia: rate-limiting drugs, athletic hearts, heart block.
+  { name: 'pulse', min: 36, max: 40, fractionDigits: 0 },
+  // Hypothermia in the frail and the elderly, and after a long theatre list.
+  { name: 'temperature', min: 34.8, max: 35, fractionDigits: 1 },
+  // Chronic tachypnoea: pain, anxiety, long-standing lung disease.
+  { name: 'respirationRate', min: 25, max: 27, fractionDigits: 0 },
+  // The patient who simply lives at ninety.
+  { name: 'systolicBP', min: 86, max: 90, fractionDigits: 0 },
+];
+
 const SEVERE_DELTA = {
   respirationRate: +12,
   oxygenSaturation: -9,
@@ -457,6 +509,7 @@ function generateObservations(admissions, patients, now) {
 function chartAdmission({ admission, patient, now, cutover, startIndex }) {
   const trajectory = faker.helpers.weightedArrayElement(TRAJECTORIES);
   const baseline = baselineFor(patient);
+  const outlier = pickIsolatedOutlier(trajectory);
   const observations = [];
 
   const from = admission.admittedAt;
@@ -503,6 +556,7 @@ function chartAdmission({ admission, patient, now, cutover, startIndex }) {
         baseline,
         severity,
         respSupport,
+        outlier,
         beforeCutover: recordedAt < cutover,
       }),
     );
@@ -557,7 +611,7 @@ function requestCriticalCareBed(admission, requestedAt, now) {
  * gave them 97% the scale would never be exercised.
  */
 function baselineFor(patient) {
-  const scale2 = patient.news2Scale === 2;
+  const scale2 = patient.trueScale === 2;
 
   return {
     respirationRate: faker.number.int(scale2 ? { min: 18, max: 22 } : { min: 13, max: 18 }),
@@ -604,6 +658,43 @@ function plateauAt(severity) {
   return clamp(severity + drift, 0, SEVERITY_CEILING);
 }
 
+/**
+ * One chronic abnormality, or none.
+ *
+ * A deteriorating patient gets none: their numbers are already moving, and a
+ * value pinned against the trend would be neither chronic nor believable.
+ */
+function pickIsolatedOutlier(trajectory) {
+  if (trajectory === 'deteriorating') return null;
+  if (!faker.datatype.boolean({ probability: ISOLATED_OUTLIER_SHARE })) return null;
+
+  const choice = faker.helpers.arrayElement(ISOLATED_OUTLIERS);
+
+  return {
+    name: choice.name,
+    value: faker.number.float({
+      min: choice.min,
+      max: choice.max,
+      fractionDigits: choice.fractionDigits,
+    }),
+  };
+}
+
+/**
+ * Applies the chronic abnormality, if this round recorded that parameter.
+ *
+ * A missing measurement stays missing. The nurse who did not take a
+ * temperature did not take it, and inventing one here to make a band appear
+ * in the data would be the same sin the whole project is built against.
+ */
+function withOutlier(observation, outlier) {
+  if (outlier === null || observation[outlier.name] === null) return observation;
+
+  observation[outlier.name] = outlier.value;
+
+  return observation;
+}
+
 function buildObservation({
   index,
   admission,
@@ -611,11 +702,12 @@ function buildObservation({
   baseline,
   severity,
   respSupport,
+  outlier,
   beforeCutover,
 }) {
   const gcs = glasgowFor(severity, beforeCutover);
 
-  return {
+  return withOutlier({
     observationId: `OBS-${String(index + 1).padStart(7, '0')}`,
     admissionId: admission.admissionId,
     recordedAt,
@@ -633,7 +725,7 @@ function buildObservation({
 
     temperature: maybeMissing('temperature', vital('temperature', baseline, severity, 0.2, 1)),
     recordedBy: faker.helpers.arrayElement(NURSES),
-  };
+  }, outlier);
 }
 
 /** baseline + (severity x full swing) + measurement noise, then clamped. */
@@ -669,7 +761,7 @@ const DE_ESCALATION_CHANCE = 0.2;
  * a floor.
  */
 function targetSupportLevel(patient, severity) {
-  const floor = patient.news2Scale === 2 ? 1 : 0;
+  const floor = patient.trueScale === 2 ? 1 : 0;
 
   let level = 0;
   if (severity > 0.95) level = 4;

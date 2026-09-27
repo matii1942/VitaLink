@@ -3,6 +3,7 @@
 // stay CommonJS and are pulled in through their default export.
 import { describe, it, expect } from 'vitest';
 import generate from '../src/data/generate.js';
+import legacy from '../src/data/legacy-format.js';
 
 const { generateDataset } = generate;
 
@@ -82,7 +83,7 @@ describe('admissions', () => {
 
   it('sends every Scale 2 patient to internal medicine as an urgent readmission', () => {
     const copd = dataset.admissions.filter(
-      (a) => patientsByMrn.get(a.mrn).news2Scale === 2,
+      (a) => patientsByMrn.get(a.mrn).trueScale === 2,
     );
     expect(copd.length).toBeGreaterThan(0);
     for (const a of copd) {
@@ -135,7 +136,7 @@ describe('observations', () => {
       for (const [admissionId, list] of observationsByAdmission()) {
         const admission = dataset.admissions.find((a) => a.admissionId === admissionId);
         const first = list.find((o) => o.oxygenSaturation !== null);
-        if (first && patientsByMrn.get(admission.mrn).news2Scale === scale) {
+        if (first && patientsByMrn.get(admission.mrn).trueScale === scale) {
           values.push(first.oxygenSaturation);
         }
       }
@@ -254,5 +255,88 @@ describe('escalation to critical care', () => {
     for (const destination of destinations) {
       expect(['home', 'intensive-care', 'coronary-care']).toContain(destination);
     }
+  });
+});
+
+describe('the scale the hospital did not write down (ADR 0003)', () => {
+  it('leaves some patients without a recorded scale', () => {
+    const unrecorded = dataset.patients.filter((p) => p.news2Scale === null);
+
+    // Without these, VitaLink's "assumed scale" path is code that runs in its
+    // unit tests and never once in the data it was written for.
+    expect(unrecorded.length).toBeGreaterThan(0);
+    expect(unrecorded.length).toBeLessThan(dataset.patients.length * 0.25);
+  });
+
+  it('records a scale of 1 or 2 for everyone else', () => {
+    for (const patient of dataset.patients) {
+      expect([null, 1, 2]).toContain(patient.news2Scale);
+    }
+  });
+
+  it('keeps the real scale even when it was not recorded', () => {
+    // The point of the case: a Scale 2 patient whose scale nobody wrote down
+    // still breathes like a Scale 2 patient, so the assumption of Scale 1 is
+    // wrong about a real person rather than about a blank.
+    const hidden = dataset.patients.filter((p) => p.news2Scale === null && p.trueScale === 2);
+
+    expect(hidden.length).toBeGreaterThan(0);
+  });
+
+  it('never sends the real scale to a client', () => {
+    const hidden = dataset.patients.find((p) => p.news2Scale === null);
+
+    const sent = legacy.toLegacyPatient(hidden);
+
+    expect(sent.news2Scale).toBeNull();
+    expect(sent).not.toHaveProperty('trueScale');
+  });
+});
+
+describe('the patient the red score rule exists for', () => {
+  // A parameter sitting in its 3-scoring band on NEWS2 Scale 1.
+  const EXTREMES = {
+    pulse: (o) => o.pulse !== null && o.pulse <= 40,
+    temperature: (o) => o.temperature !== null && o.temperature <= 35,
+    respirationRate: (o) => o.respirationRate !== null && o.respirationRate >= 25,
+    systolicBP: (o) => o.systolicBP !== null && o.systolicBP <= 90,
+  };
+
+  /** Admissions where one parameter is extreme in most of their rounds. */
+  function withChronicExtreme() {
+    const found = [];
+
+    for (const [admissionId, list] of observationsByAdmission()) {
+      for (const [name, isExtreme] of Object.entries(EXTREMES)) {
+        const hits = list.filter(isExtreme).length;
+        if (hits >= 2 && hits >= list.length * 0.6) {
+          found.push({ admissionId, name, hits, rounds: list.length });
+        }
+      }
+    }
+
+    return found;
+  }
+
+  it('produces patients whose single abnormal parameter persists', () => {
+    // Before this existed, the generator only ever deteriorated people as a
+    // whole, so any parameter reaching 3 came with a total past 7. The
+    // low-medium band was unreachable and the ward board proved it: nought
+    // out of 1 025 patients.
+    expect(withChronicExtreme().length).toBeGreaterThan(0);
+  });
+
+  it('spreads them across more than one parameter', () => {
+    const names = new Set(withChronicExtreme().map((entry) => entry.name));
+
+    // One kind of abnormality would exercise one branch of the scorer and
+    // leave the rest exactly as unvisited as before.
+    expect(names.size).toBeGreaterThan(1);
+  });
+
+  it('keeps them a minority of the ward', () => {
+    const share = withChronicExtreme().length / dataset.admissions.length;
+
+    expect(share).toBeLessThan(0.25);
   });
 });
