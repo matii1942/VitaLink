@@ -26,3 +26,20 @@ output "database_url" {
   value       = local.database_url
   sensitive   = true
 }
+
+output "hospital_soap_url" {
+  description = "Where the functions find the simulated hospital, inside the VPC."
+  value       = local.hospital_soap_url
+}
+
+output "hospital_instance_id" {
+  description = <<-TEXT
+    For opening a shell on the machine without an SSH port or a key pair:
+
+      aws ssm start-session --target <this> --region us-east-2
+
+    Useful when the service does not come up. The startup script logs to
+    /var/log/cloud-init-output.log.
+  TEXT
+  value       = aws_instance.hospital.id
+}

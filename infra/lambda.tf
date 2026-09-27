@@ -35,9 +35,14 @@ locals {
   }
 
   environment = {
-    NODE_ENV        = "production"
-    DATABASE_URL    = local.database_url
-    LEGACY_SOAP_URL = var.legacy_soap_url
+    NODE_ENV     = "production"
+    DATABASE_URL = local.database_url
+
+    # Every function needs this set, including the read API, which never makes
+    # a SOAP call: the module that builds the client reads it at startup, on
+    # purpose, so a missing value stops the process immediately instead of
+    # surfacing as a failed synchronisation an hour later.
+    LEGACY_SOAP_URL = local.hospital_soap_url
   }
 }
 

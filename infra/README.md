@@ -61,6 +61,13 @@ Invoke-RestMethod "$url/health"
 
 ## Tearing it down
 
+**The standing rule on this project: destroy it when it is not being shown.**
+
+Waiting ten minutes for `terraform apply` the next day beats paying for a
+database nobody is querying. The whole deployment is about US$ 24 a month while
+it runs — a database at roughly US$ 14, an instance at US$ 6, and its public
+IPv4 address at US$ 3.60 — and it is paid out of a finite pot of credits.
+
 ```powershell
 terraform destroy
 ```

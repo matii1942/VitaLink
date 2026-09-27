@@ -6,11 +6,10 @@
  * without being deleted — which matters here, because the schedule ships
  * disabled.
  *
- * It ships disabled because there is nothing at the other end yet. The
- * functions have no route to the internet by design, and the hospital
- * simulator is not inside the VPC yet. Creating a schedule that would fail
- * every hour, fill the logs and mark every run as an error would be worse than
- * creating none: an alarm that is always ringing is an alarm nobody hears.
+ * It shipped disabled while there was nothing at the other end, and is on now
+ * that the hospital runs inside the VPC. A schedule that fails every hour,
+ * fills the logs and marks every run as an error is worse than no schedule at
+ * all: an alarm that always rings is an alarm nobody hears.
  */
 
 data "aws_iam_policy_document" "scheduler_assume_role" {

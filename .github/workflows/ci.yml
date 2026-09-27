@@ -58,10 +58,10 @@ jobs:
 
     steps:
       - name: Check out the repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           # The version lives in .nvmrc, at the repository root, and nowhere
           # else. Whoever changes it changes it for every machine that runs
@@ -124,10 +124,10 @@ jobs:
 
     steps:
       - name: Check out the repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           # The version lives in .nvmrc, at the repository root, and nowhere
           # else. Whoever changes it changes it for every machine that runs

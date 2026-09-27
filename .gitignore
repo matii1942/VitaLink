@@ -28,6 +28,10 @@ npm-debug.log*
 !.vscode/extensions.json
 .idea/
 
+# --- notas personales ---
+# El cuaderno de aprendizaje es para mí, no para el repositorio público.
+NOTAS-DE-APRENDIZAJE.md
+
 # --- os ---
 .DS_Store
 Thumbs.db
