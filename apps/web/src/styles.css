@@ -1,0 +1,375 @@
+/*
+ * One stylesheet, plain CSS, no framework.
+ *
+ * A ward board is a table, a row of counters and a handful of badges. A
+ * utility framework earns its keep across dozens of screens built by several
+ * people; here it would be a dependency to install, a build step to configure
+ * and a vocabulary to learn, in exchange for saving about a hundred lines.
+ *
+ * Everything is built on custom properties — the --names. They are read at run
+ * time, so the dark theme is the same stylesheet with different values rather
+ * than a second copy of every rule.
+ */
+
+:root {
+  color-scheme: light;
+
+  --page: #f9f9f7;
+  --surface: #fcfcfb;
+  --border: rgba(11, 11, 11, 0.1);
+  --rule: #e1e0d9;
+  --text: #0b0b0b;
+  --text-soft: #52514e;
+  --text-muted: #898781;
+
+  /*
+   * The four NEWS2 bands, as status colours.
+   *
+   * These are NOT what tells a nurse how sick somebody is. Measured on the
+   * light surface, low-medium and medium sit 13.6 apart on a perceptual scale
+   * whose floor for "tell these apart" is 15 — and that is with full colour
+   * vision. The pair that is hardest to separate is exactly the pair the
+   * escalation threshold runs between.
+   *
+   * So colour is the third signal here, never the first. The score is a
+   * number, the band is a word, and the dot below only agrees with them.
+   */
+  --risk-low: #0ca30c;
+  --risk-low-medium: #fab219;
+  --risk-medium: #ec835a;
+  --risk-high: #d03b3b;
+
+  --radius: 6px;
+  --gap: 12px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme='light'])) {
+    color-scheme: dark;
+
+    --page: #0d0d0d;
+    --surface: #1a1a19;
+    --border: rgba(255, 255, 255, 0.1);
+    --rule: #2c2c2a;
+    --text: #ffffff;
+    --text-soft: #c3c2b7;
+    --text-muted: #898781;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--text);
+  font: 15px/1.5 system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+a {
+  color: inherit;
+}
+
+.layout {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 24px 16px 64px;
+}
+
+.masthead {
+  display: flex;
+  align-items: baseline;
+  gap: var(--gap);
+  border-bottom: 1px solid var(--rule);
+  padding-bottom: 12px;
+  margin-bottom: 24px;
+}
+
+.masthead h1 {
+  font-size: 18px;
+  margin: 0;
+}
+
+.masthead p {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 13px;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+
+/* --- ward list ------------------------------------------------------- */
+
+.ward-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--gap);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.ward-list a {
+  display: block;
+  text-decoration: none;
+}
+
+.ward-list a:hover .card,
+.ward-list a:focus-visible .card {
+  border-color: var(--text-muted);
+}
+
+.ward-name {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.ward-counts {
+  color: var(--text-soft);
+  font-size: 13px;
+}
+
+/* --- board header and counters --------------------------------------- */
+
+.board-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px var(--gap);
+  margin-bottom: 16px;
+}
+
+.board-head h2 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.board-head .meta {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.counters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+/*
+ * A counter is a button: clicking it filters the table below. The count is
+ * the headline, the label sits under it, and the dot only repeats what the
+ * label already says.
+ */
+.counter {
+  flex: 1 1 128px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.counter[aria-pressed='true'] {
+  border-color: var(--text-soft);
+  box-shadow: inset 0 0 0 1px var(--text-soft);
+}
+
+.counter .value {
+  display: block;
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.counter .label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-soft);
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+.search {
+  flex: 1 1 200px;
+  min-width: 180px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  color: inherit;
+  font: inherit;
+}
+
+/* --- the board table -------------------------------------------------- */
+
+.board {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.board caption {
+  caption-side: top;
+  text-align: left;
+  color: var(--text-muted);
+  font-size: 13px;
+  padding-bottom: 8px;
+}
+
+.board th,
+.board td {
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--rule);
+  vertical-align: top;
+}
+
+.board thead th {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.board tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.board tbody tr:hover {
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+}
+
+/* The score: the biggest thing in the row, because it is the point of it. */
+.score {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.score .aggregate {
+  font-size: 20px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  min-width: 1.6ch;
+  text-align: right;
+}
+
+.score .band {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--text-soft);
+}
+
+.dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex: none;
+  /* A ring keeps the dot visible when a colour lands near the surface. */
+  box-shadow: 0 0 0 1px var(--border);
+}
+
+.dot[data-risk='low'] { background: var(--risk-low); }
+.dot[data-risk='low-medium'] { background: var(--risk-low-medium); }
+.dot[data-risk='medium'] { background: var(--risk-medium); }
+.dot[data-risk='high'] { background: var(--risk-high); }
+.dot[data-risk='none'] { background: transparent; box-shadow: inset 0 0 0 1px var(--text-muted); }
+
+.patient-name {
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.patient-name:hover,
+.patient-name:focus-visible {
+  text-decoration: underline;
+}
+
+.subtle {
+  color: var(--text-soft);
+  font-size: 13px;
+}
+
+.nowrap {
+  white-space: nowrap;
+}
+
+.flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+/*
+ * A flag always carries its own words. Nothing on this board means anything
+ * by colour alone — turn the screen to greyscale and every row still reads.
+ */
+.flag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  line-height: 1.3;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.flag[data-kind='critical-care'] {
+  background: var(--risk-high);
+  border-color: var(--risk-high);
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.flag[data-kind='red-score'] {
+  border-color: var(--risk-high);
+  color: var(--text);
+}
+
+.flag[data-kind='partial'],
+.flag[data-kind='assumed'] {
+  color: var(--text-soft);
+}
+
+.state {
+  color: var(--text-soft);
+  padding: 32px 0;
+}
+
+.state[data-kind='error'] {
+  color: var(--text);
+  background: color-mix(in srgb, var(--risk-high) 14%, transparent);
+  border: 1px solid var(--risk-high);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+
+.back {
+  display: inline-block;
+  color: var(--text-soft);
+  font-size: 13px;
+  margin-bottom: 12px;
+}

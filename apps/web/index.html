@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>VitaLink — ward board</title>
+  </head>
+  <body>
+    <!--
+      The only element the page starts with. Everything a nurse sees is put
+      inside it by JavaScript at run time; the file the browser downloads is
+      this, and it is empty.
+
+      That is the trade a single-page application makes. Navigation is
+      instant because nothing is fetched again, and the first paint waits for
+      a script. For an internal tool on a hospital network that is the right
+      side of the trade; for a public page that must appear in a search
+      engine it would not be.
+    -->
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
