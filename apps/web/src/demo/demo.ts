@@ -63,7 +63,7 @@ const routes = shiftTimes(
 export function demoGet<T>(path: string, signal?: AbortSignal): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timer = setTimeout(() => {
-      const found = routes[path];
+      const found = routes[path] ?? searchLocally(path);
 
       if (found === undefined) {
         reject(new DemoMiss(path));
@@ -113,4 +113,65 @@ export function shiftTimes(value: unknown, deltaMs: number, key?: string): unkno
   }
 
   return value;
+}
+
+/**
+ * The one thing the recording cannot hold, and what is done about it.
+ *
+ * Every other screen asks for a fixed set of paths, so recording the answers
+ * covers them completely. A search does not: the path depends on what the
+ * reader types, and no finite recording covers every string a person might
+ * try. A search box that only worked for three magic words would look broken,
+ * which is worse than not shipping it.
+ *
+ * So this is the single place where the demo computes an answer instead of
+ * replaying one, and it is kept as small as the exception allows: the full
+ * list of patients is recorded once, and this filters it. ADR 0016 says the
+ * demo re-implements no endpoint; this is the exception to that sentence and
+ * is written down there as one.
+ *
+ * It is deliberately more permissive than the API. The server folds the
+ * Spanish accents by name with `translate`; this strips every combining mark
+ * Unicode knows about. Where they differ, the demo matches something the real
+ * API would not — which is the safe direction for a demonstration, and the
+ * wrong direction for a contract. Nothing here is the contract.
+ */
+const SEARCH_PATH = '/patients/search?q=';
+const RECORDED_SEARCH = '/patients/search?q=&pageSize=25';
+
+interface SearchPage {
+  data: { familyName: string; givenName: string; mrn: string }[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+}
+
+function searchLocally(path: string): unknown {
+  if (!path.startsWith(SEARCH_PATH)) {
+    return undefined;
+  }
+
+  const all = routes[RECORDED_SEARCH] as SearchPage | undefined;
+
+  if (all === undefined) {
+    return undefined;
+  }
+
+  const query = fold(decodeURIComponent(new URLSearchParams(path.split('?')[1]).get('q') ?? ''));
+  const data = all.data.filter((patient) =>
+    fold(`${patient.familyName} ${patient.givenName} ${patient.mrn}`).includes(query),
+  );
+
+  return { ...all, data, total: data.length, totalPages: Math.max(1, Math.ceil(data.length / all.pageSize)) };
+}
+
+/** Lower case with the accents taken off, so "vazquez" meets "VÁZQUEZ". */
+export function fold(text: string): string {
+  // NFD splits a letter from its accent into two code points; the range then
+  // removes the accents and leaves the letters.
+  return text
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
 }

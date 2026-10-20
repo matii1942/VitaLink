@@ -58,6 +58,27 @@ that is not taken. The demo build also swaps `BrowserRouter` for
 `HashRouter`, because a static host answering `/admissions/ADM-000016` with a
 404 would break a reload before React ever ran.
 
+## The one exception, and why it is one
+
+The sentence above — nothing in the demo re-implements an endpoint — holds for
+every screen but the patient search, and it is worth saying exactly where it
+stops.
+
+Every other screen asks for a fixed set of paths, so recording the answers
+covers them completely. A search does not: the path carries what the reader
+typed, and no finite recording covers every string a person might try.
+Recording a handful of queries would give a search box that works for three
+magic words and looks broken for everything else, which teaches the reader
+something false about the system.
+
+So the full list of patients is recorded once, and `searchLocally` in
+`demo.ts` filters it. That is the only computed answer in the demo. It is
+deliberately more permissive than the API: the server folds the Spanish
+accents by name with `translate`, and the demo strips every combining mark
+Unicode knows about, so where they differ the demo matches something the real
+API would not. That is the safe direction for a demonstration and the wrong
+one for a contract, and nothing in the demo is the contract.
+
 ## Consequences
 
 The link works, costs nothing, and cannot leak: there is no database and no

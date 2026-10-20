@@ -12,6 +12,8 @@ import type {
   ObservationView,
   ScoreView,
   SummaryView,
+  PatientSearchResult,
+  PatientWhereabouts,
   SyncRunView,
   WardBoard,
   WardBoardRow,
@@ -182,6 +184,38 @@ export function syncRun(over: Partial<SyncRunView> = {}): SyncRunView {
     observationsRejected: 0,
     scoresComputed: 519,
     issues: [],
+    ...over,
+  };
+}
+
+/** A patient in a bed, scoring nothing in particular. */
+export function whereabouts(over: Partial<PatientWhereabouts> = {}): PatientWhereabouts {
+  return {
+    admissionId: `ADM-${next()}`,
+    ward: 'internal-medicine',
+    admittedAt: '2026-09-20T10:00:00.000Z',
+    awaitingCriticalCare: false,
+    risk: 'low',
+    aggregate: 0,
+    ...over,
+  };
+}
+
+export function patientSearchResult(
+  over: Partial<PatientSearchResult> = {},
+): PatientSearchResult {
+  const n = next();
+
+  return {
+    mrn: `MRN-${n}`,
+    familyName: 'GOMEZ',
+    givenName: 'Paciente',
+    birthDate: '1970-05-12',
+    age: 56,
+    sex: 'female',
+    news2Scale: 1,
+    openAdmissions: 1,
+    current: whereabouts(),
     ...over,
   };
 }

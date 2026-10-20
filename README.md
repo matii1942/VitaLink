@@ -43,6 +43,12 @@ And the synchronisation, seen from outside. It runs once an hour, unattended, 8,
 
 Two things on it are the project's own claims, checked against its history rather than asserted. Consecutive runs over unchanged data report the same counts and the ward does not grow — that is idempotence, and it is what makes an hourly job safe to leave alone. And every record the normaliser refused is counted, with its reason kept and shown: a run that rejects nothing says so, and a run that rejects something says what.
 
+And the question a board cannot answer: *where is this person*. A board knows one ward and only the patients in a bed; somebody holding a phone call needs every ward and the ones who went home.
+
+![Finding a patient across every ward](docs/images/find-a-patient.png)
+
+The accents are the reason that search is a hand-written query. These are Spanish names, and a nurse under pressure types `vazquez`, not `Vázquez`. Case-insensitive matching folds the case and leaves the accent, so `VÁZQUEZ` would not be found; PostgreSQL's built-in `translate` folds both. The extension that does this properly, `unaccent`, has to be installed by a superuser — and the continuous integration database is not one, which is the kind of constraint worth discovering before the pipeline does.
+
 The summary card above reads *unavailable* because no API key is configured in this environment. That is the designed behaviour, not a failure: with no model, the endpoint says so and calls nothing. The [live demo](https://matii1942.github.io/VitaLink/) shows the other branch: a written handover for every patient, each one through the real fact sheet, the real budget gate and the real verifier.
 
 ---
@@ -65,7 +71,8 @@ VitaLink does not replace the legacy system. It reads from it, scores what it fi
 
 - **A REST API** serving patients, admissions, observations and a ward board, paginated, with the ward board written as one hand-measured SQL query.
 - **A clinical summary** for one admission, written by a language model from a fact sheet built out of the patient's own observations — where every figure in the generated text is checked against the figures it was given, and a summary containing one that was not is discarded rather than served.
-- **A ward dashboard** in React: the board, a patient detail with a NEWS2 trend, and filters that work on data already in the browser.
+- **A ward dashboard** in React: a first screen written for somebody who has never heard of NEWS2, the board, a patient detail with a NEWS2 trend, a search that crosses every ward, and a view of what the synchronisation has been doing.
+- **A patient search** that folds the Spanish accents, so `vazquez` finds `VÁZQUEZ` and the other way round, and that answers with where the person is — including "not in a bed", which is an answer and not a blank.
 - **A deployment**, as Terraform: a VPC with no NAT gateway, RDS PostgreSQL, the API and the synchronisation job as two Lambda functions, and an hourly schedule. Built to be created, demonstrated and destroyed.
 
 Verified end to end on 22 September 2026: a sync of the simulator's 25 patients stores 478 observations and scores all 478, with nothing rejected. Six consecutive runs leave the same 478 rows.
@@ -230,6 +237,7 @@ application runs, and is tested, with no key and no cost.
 | `POST http://localhost:3000/sync` | Runs a synchronisation |
 | `http://localhost:3000/sync/runs` | The ten most recent runs |
 | `http://localhost:3000/patients` | Patients, paginated: `?page=1&pageSize=25` |
+| `http://localhost:3000/patients/search` | Patients by name or MRN, accent-insensitive: `?q=vazquez` |
 | `http://localhost:3000/patients/{mrn}` | One patient with their admission history |
 | `http://localhost:3000/admissions` | Admissions, filterable: `?ward=surgery&active=true` |
 | `http://localhost:3000/admissions/{id}` | One admission with its patient |
@@ -261,7 +269,7 @@ cd ../web
 npm test            # the screens, against a stubbed fetch
 ```
 
-**408 tests**: 203 unit and 72 end to end in the API, 63 in the simulator, 70 in
+**441 tests**: 203 unit and 85 end to end in the API, 63 in the simulator, 90 in
 the dashboard.
 
 The end-to-end tests use a second database, `vitalink_test`, on the same

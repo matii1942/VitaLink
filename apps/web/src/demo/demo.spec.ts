@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { CAPTURED_AT, DemoMiss, demoGet, shiftTimes } from './demo';
+import { CAPTURED_AT, DemoMiss, demoGet, fold, shiftTimes } from './demo';
 
 describe('shiftTimes', () => {
   const HOUR = 3_600_000;
@@ -64,5 +64,57 @@ describe('the recording', () => {
     controller.abort();
 
     await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+  });
+});
+
+describe('fold', () => {
+  it.each([
+    ['VÁZQUEZ', 'vazquez'],
+    ['vazquez', 'vazquez'],
+    ['Verónica', 'veronica'],
+    ['PEÑA', 'pena'],
+    ['MRN-000021', 'mrn-000021'],
+  ])('reduces %s to %s', (input, expected) => {
+    expect(fold(input)).toBe(expected);
+  });
+});
+
+describe('the recorded search', () => {
+  it('answers a query the recording does not literally hold', async () => {
+    // The one path the demo computes instead of replaying. Everything else
+    // 404s when it was not recorded; this has to not.
+    const page = await demoGet<{ total: number; data: { familyName: string }[] }>(
+      '/patients/search?q=vazquez&pageSize=25',
+    );
+
+    expect(page.total).toBeGreaterThan(0);
+    expect(page.data.every((p) => fold(p.familyName).includes('vazquez'))).toBe(true);
+  });
+
+  it('folds the accents in both directions', async () => {
+    const plain = await demoGet<{ total: number }>('/patients/search?q=vazquez&pageSize=25');
+    const accented = await demoGet<{ total: number }>(
+      `/patients/search?q=${encodeURIComponent('VÁZQUEZ')}&pageSize=25`,
+    );
+
+    expect(accented.total).toBe(plain.total);
+  });
+
+  it('answers an empty search with everybody', async () => {
+    const page = await demoGet<{ total: number }>('/patients/search?q=&pageSize=25');
+
+    expect(page.total).toBe(25);
+  });
+
+  it('answers a search that matches nobody with an empty page, not a miss', async () => {
+    const page = await demoGet<{ total: number; data: unknown[]; totalPages: number }>(
+      '/patients/search?q=nobodyhasthisname&pageSize=25',
+    );
+
+    expect(page).toMatchObject({ total: 0, data: [], totalPages: 1 });
+  });
+
+  it('still refuses a path that is not a search and was not recorded', async () => {
+    await expect(demoGet('/patients/MRN-999999')).rejects.toBeInstanceOf(DemoMiss);
   });
 });

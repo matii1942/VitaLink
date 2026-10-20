@@ -10,6 +10,18 @@
 # --- dependencies ---
 node_modules/
 
+# --- terraform ---
+# infra/.gitignore already covers the real state and the real variables. These
+# repeat the rules at the root, because the file that got committed was an
+# empty state left behind by running terraform from the wrong directory, and
+# a rule that only exists one level down does not catch that.
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+.terraform/
+.terraform.tfstate.lock.info
+
 # --- build output ---
 dist/
 dist-lambda/

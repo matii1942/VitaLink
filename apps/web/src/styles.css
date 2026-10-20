@@ -852,3 +852,32 @@ a {
   margin-left: 8px;
   vertical-align: middle;
 }
+
+/* ---- Finding a patient ---- */
+
+/*
+ * The search box on this screen is the screen, not a filter beside a table,
+ * so it gets the width to look like one.
+ */
+.search-wide {
+  width: 100%;
+  max-width: 420px;
+  margin-bottom: var(--gap);
+}
+
+/* The second line of a cell: age and sex, when a reading was taken, and so on. */
+.patient-meta {
+  display: block;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.mrn {
+  color: var(--text-soft);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.board td .flag[data-kind='critical-care'] {
+  margin-top: 4px;
+}

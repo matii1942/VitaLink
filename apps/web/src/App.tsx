@@ -10,6 +10,7 @@ import { Link, NavLink, Route, Routes } from 'react-router-dom';
 
 import { CAPTURED_AT, IS_DEMO } from './demo/demo';
 import { PatientDetail } from './pages/PatientDetail';
+import { PatientSearch } from './pages/PatientSearch';
 import { SyncRuns } from './pages/SyncRuns';
 import { WardBoard } from './pages/WardBoard';
 import { WardList } from './pages/WardList';
@@ -57,6 +58,7 @@ export function App() {
           <NavLink to="/" end>
             Wards
           </NavLink>
+          <NavLink to="/patients">Find a patient</NavLink>
           <NavLink to="/sync">Synchronisation</NavLink>
         </nav>
       </header>
@@ -65,6 +67,7 @@ export function App() {
 
       <Routes>
         <Route path="/" element={<WardList />} />
+        <Route path="/patients" element={<PatientSearch />} />
         <Route path="/sync" element={<SyncRuns />} />
         <Route path="/wards/:ward" element={<WardBoard />} />
         <Route path="/admissions/:admissionId" element={<PatientDetail />} />

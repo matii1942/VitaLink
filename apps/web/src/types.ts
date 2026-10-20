@@ -171,3 +171,18 @@ export interface Page<T> {
   total: number;
   totalPages: number;
 }
+
+/** Where a patient is right now. Null when they are not in a bed. */
+export interface PatientWhereabouts {
+  admissionId: string;
+  ward: string;
+  admittedAt: string;
+  awaitingCriticalCare: boolean;
+  risk: string | null;
+  aggregate: number | null;
+}
+
+export interface PatientSearchResult extends PatientBrief {
+  openAdmissions: number;
+  current: PatientWhereabouts | null;
+}

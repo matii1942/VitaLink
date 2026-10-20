@@ -76,3 +76,27 @@ export interface PatientDetail extends PatientSummary {
   /** Most recent admission first. */
   admissions: AdmissionSummary[];
 }
+
+/**
+ * Where a patient is right now, for a search that crosses wards.
+ *
+ * Null when nobody is looking after them at the moment — they went home, or
+ * they were never admitted. That is a real answer to "where is this person",
+ * and a search that only returned the admitted ones would quietly hide it.
+ */
+export interface PatientWhereabouts {
+  admissionId: string;
+  ward: string;
+  admittedAt: Date;
+  /** True while a critical care bed has been asked for and not appeared. */
+  awaitingCriticalCare: boolean;
+  /** The band of their most recent score, or null if nobody has measured. */
+  risk: string | null;
+  /** The aggregate behind that band. Null for the same reasons as `risk`. */
+  aggregate: number | null;
+}
+
+export interface PatientSearchResult extends PatientBrief {
+  openAdmissions: number;
+  current: PatientWhereabouts | null;
+}
