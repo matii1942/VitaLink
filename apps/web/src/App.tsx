@@ -6,10 +6,11 @@
  * reloads the page — the URL stays the source of truth for what is on
  * screen, instead of a variable in memory that only this tab knows about.
  */
-import { Link, Route, Routes } from 'react-router-dom';
+import { Link, NavLink, Route, Routes } from 'react-router-dom';
 
 import { CAPTURED_AT, IS_DEMO } from './demo/demo';
 import { PatientDetail } from './pages/PatientDetail';
+import { SyncRuns } from './pages/SyncRuns';
 import { WardBoard } from './pages/WardBoard';
 import { WardList } from './pages/WardList';
 
@@ -48,12 +49,23 @@ export function App() {
           </Link>
         </h1>
         <p>Ward board — synthetic data</p>
+        {/*
+          Two destinations, so the navigation is a pair of links rather than a
+          component. A third one is the moment to reach for something more.
+        */}
+        <nav className="masthead-nav">
+          <NavLink to="/" end>
+            Wards
+          </NavLink>
+          <NavLink to="/sync">Synchronisation</NavLink>
+        </nav>
       </header>
 
       {IS_DEMO && <DemoNotice />}
 
       <Routes>
         <Route path="/" element={<WardList />} />
+        <Route path="/sync" element={<SyncRuns />} />
         <Route path="/wards/:ward" element={<WardBoard />} />
         <Route path="/admissions/:admissionId" element={<PatientDetail />} />
         <Route path="*" element={<p className="state">No such page.</p>} />

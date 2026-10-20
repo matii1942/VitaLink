@@ -50,9 +50,57 @@ describe('GET /wards', () => {
     const { body } = await request(testApp.server).get('/wards').expect(200);
 
     expect(body).toEqual([
-      { ward: 'cardiology', openAdmissions: 1, totalAdmissions: 1 },
-      { ward: 'surgery', openAdmissions: 1, totalAdmissions: 2 },
+      {
+        ward: 'cardiology',
+        openAdmissions: 1,
+        totalAdmissions: 1,
+        // Seeded with no observations, so the admission is open and unscored.
+        // "Not scored" is a band of its own and not an absence: it is the
+        // patient nobody has taken the vital signs of.
+        risk: { awaitingCriticalCare: 0, high: 0, medium: 0, lowMedium: 0, low: 0, unscored: 1 },
+      },
+      {
+        ward: 'surgery',
+        openAdmissions: 1,
+        totalAdmissions: 2,
+        risk: { awaitingCriticalCare: 0, high: 0, medium: 0, lowMedium: 0, low: 0, unscored: 1 },
+      },
     ]);
+  });
+
+  it('breaks the open admissions down by band, and the bands add up', async () => {
+    const patient = await seedPatient(testApp.prisma);
+
+    const scored = await seedAdmission(testApp.prisma, {
+      mrn: patient.mrn,
+      ward: 'surgery',
+      dischargedAt: null,
+    });
+    const observation = await seedObservation(testApp.prisma, {
+      admissionId: scored.admissionId,
+    });
+    await seedScore(testApp.prisma, {
+      observationId: observation.observationId,
+      risk: 'high',
+      aggregate: 8,
+    });
+
+    // A second admission with nothing recorded, so the two bands differ.
+    await seedAdmission(testApp.prisma, {
+      mrn: patient.mrn,
+      ward: 'surgery',
+      dischargedAt: null,
+    });
+
+    const { body } = await request(testApp.server).get('/wards').expect(200);
+    const surgery = body.find((w: { ward: string }) => w.ward === 'surgery');
+
+    expect(surgery.risk).toMatchObject({ high: 1, unscored: 1 });
+
+    // The four bands plus unscored partition the open admissions. If this
+    // ever fails, the query is counting somebody twice or losing somebody.
+    const { high, medium, lowMedium, low, unscored } = surgery.risk;
+    expect(high + medium + lowMedium + low + unscored).toBe(surgery.openAdmissions);
   });
 
   it('counts as numbers, not as strings', async () => {

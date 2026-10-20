@@ -99,15 +99,62 @@ export class WardsService {
    * a JavaScript BigInt — and JSON.stringify throws on those.
    */
   async list(): Promise<WardSummary[]> {
-    return this.prisma.$queryRaw<WardSummary[]>`
+    const records = await this.prisma.$queryRaw<WardListRecord[]>`
+      WITH open_admission AS (
+        SELECT
+          a."ward",
+          a."transferUnit",
+          s."risk"
+        FROM "Admission" a
+        -- The same lateral join as the board, for the same reason: one row
+        -- per admission, found by a single index seek, and the admission
+        -- survives having no observation at all. See ADR 0010.
+        LEFT JOIN LATERAL (
+          SELECT o."observationId"
+          FROM "Observation" o
+          WHERE o."admissionId" = a."admissionId"
+          ORDER BY o."recordedAt" DESC, o."observationId" DESC
+          LIMIT 1
+        ) o ON TRUE
+        LEFT JOIN "Score" s ON s."observationId" = o."observationId"
+        WHERE a."dischargedAt" IS NULL
+      ),
+      open_count AS (
+        SELECT
+          "ward",
+          (COUNT(*))::int AS "openAdmissions",
+          (COUNT(*) FILTER (WHERE "transferUnit" IS NOT NULL))::int AS "awaitingCriticalCare",
+          (COUNT(*) FILTER (WHERE "risk" = 'high'))::int AS "high",
+          (COUNT(*) FILTER (WHERE "risk" = 'medium'))::int AS "medium",
+          (COUNT(*) FILTER (WHERE "risk" = 'low-medium'))::int AS "lowMedium",
+          (COUNT(*) FILTER (WHERE "risk" = 'low'))::int AS "low",
+          (COUNT(*) FILTER (WHERE "risk" IS NULL))::int AS "unscored"
+        FROM open_admission
+        GROUP BY "ward"
+      ),
+      every_admission AS (
+        SELECT "ward", (COUNT(*))::int AS "totalAdmissions"
+        FROM "Admission"
+        GROUP BY "ward"
+      )
+      -- Driven from every_admission, not from open_count: a ward whose
+      -- patients have all gone home still exists and still has a history.
       SELECT
-        a.ward,
-        (COUNT(*) FILTER (WHERE a."dischargedAt" IS NULL))::int AS "openAdmissions",
-        (COUNT(*))::int AS "totalAdmissions"
-      FROM "Admission" a
-      GROUP BY a.ward
-      ORDER BY a.ward
+        e."ward",
+        e."totalAdmissions",
+        COALESCE(o."openAdmissions", 0) AS "openAdmissions",
+        COALESCE(o."awaitingCriticalCare", 0) AS "awaitingCriticalCare",
+        COALESCE(o."high", 0) AS "high",
+        COALESCE(o."medium", 0) AS "medium",
+        COALESCE(o."lowMedium", 0) AS "lowMedium",
+        COALESCE(o."low", 0) AS "low",
+        COALESCE(o."unscored", 0) AS "unscored"
+      FROM every_admission e
+      LEFT JOIN open_count o ON o."ward" = e."ward"
+      ORDER BY e."ward"
     `;
+
+    return records.map(toWardSummary);
   }
 
   /**
@@ -254,6 +301,39 @@ export class WardsService {
 
     return found !== null;
   }
+}
+
+/**
+ * One flat row of the ward list query. Written out for the same reason as
+ * BoardRecord: a raw query has no generated type.
+ */
+interface WardListRecord {
+  ward: string;
+  openAdmissions: number;
+  totalAdmissions: number;
+  awaitingCriticalCare: number;
+  high: number;
+  medium: number;
+  lowMedium: number;
+  low: number;
+  unscored: number;
+}
+
+/** The flat row, folded into the shape the API sends. */
+function toWardSummary(record: WardListRecord): WardSummary {
+  return {
+    ward: record.ward,
+    openAdmissions: record.openAdmissions,
+    totalAdmissions: record.totalAdmissions,
+    risk: {
+      awaitingCriticalCare: record.awaitingCriticalCare,
+      high: record.high,
+      medium: record.medium,
+      lowMedium: record.lowMedium,
+      low: record.low,
+      unscored: record.unscored,
+    },
+  };
 }
 
 function toBoardRow(record: BoardRecord, now: Date): WardBoardRow {

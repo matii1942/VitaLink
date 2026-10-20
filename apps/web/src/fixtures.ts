@@ -12,8 +12,11 @@ import type {
   ObservationView,
   ScoreView,
   SummaryView,
+  SyncRunView,
   WardBoard,
   WardBoardRow,
+  WardRisk,
+  WardSummary,
 } from './types';
 
 let sequence = 0;
@@ -130,6 +133,55 @@ export function summary(over: Partial<SummaryView> = {}): SummaryView {
     promptVersion: 'handover-1',
     disclaimer: 'Generated from the observations recorded for this admission. Derived text, not a clinical record.',
     budget: { spentUsd: 0.01, limitUsd: 5, remainingUsd: 4.99, periodStart: '2026-09-01T00:00:00.000Z' },
+    ...over,
+  };
+}
+
+/**
+ * A ward with nobody in a bed. Every test about the first screen says in one
+ * line which patients it is actually about.
+ */
+export function wardRisk(over: Partial<WardRisk> = {}): WardRisk {
+  return {
+    awaitingCriticalCare: 0,
+    high: 0,
+    medium: 0,
+    lowMedium: 0,
+    low: 0,
+    unscored: 0,
+    ...over,
+  };
+}
+
+export function wardSummary(over: Partial<WardSummary> = {}): WardSummary {
+  const risk = over.risk ?? wardRisk();
+  const bandTotal = risk.high + risk.medium + risk.lowMedium + risk.low + risk.unscored;
+
+  return {
+    ward: 'internal-medicine',
+    // The bands partition the open admissions, so the default keeps the two
+    // in step. A test that wants them to disagree has to say so.
+    openAdmissions: bandTotal,
+    totalAdmissions: bandTotal,
+    ...over,
+    risk,
+  };
+}
+
+/** A run that finished cleanly, 2.8 seconds long, with nothing refused. */
+export function syncRun(over: Partial<SyncRunView> = {}): SyncRunView {
+  return {
+    id: `run-${next()}`,
+    startedAt: '2026-09-27T18:12:41.242Z',
+    finishedAt: '2026-09-27T18:12:44.026Z',
+    status: 'succeeded',
+    durationMs: 2784,
+    patientsSynced: 25,
+    admissionsSynced: 25,
+    observationsSynced: 519,
+    observationsRejected: 0,
+    scoresComputed: 519,
+    issues: [],
     ...over,
   };
 }

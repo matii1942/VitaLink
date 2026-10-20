@@ -96,10 +96,51 @@ export interface WardBoard {
   rows: WardBoardRow[];
 }
 
+/**
+ * The open admissions of a ward, by band.
+ *
+ * `awaitingCriticalCare` overlaps the bands rather than being a sixth one:
+ * a patient waiting for a bed is also counted in whichever band their score
+ * falls, exactly as the ward board's counters do. The four bands plus
+ * `unscored` sum to `openAdmissions`.
+ */
+export interface WardRisk {
+  awaitingCriticalCare: number;
+  high: number;
+  medium: number;
+  lowMedium: number;
+  low: number;
+  unscored: number;
+}
+
 export interface WardSummary {
   ward: string;
   openAdmissions: number;
   totalAdmissions: number;
+  risk: WardRisk;
+}
+
+/** One record a synchronisation refused, and why. */
+export interface SyncIssue {
+  record: string;
+  field?: string;
+  reason: string;
+}
+
+export interface SyncRunView {
+  id: string;
+  startedAt: string;
+  /** Null while the run is still going. */
+  finishedAt: string | null;
+  /** running | succeeded | partial | failed */
+  status: string;
+  durationMs: number | null;
+  patientsSynced: number;
+  admissionsSynced: number;
+  observationsSynced: number;
+  observationsRejected: number;
+  scoresComputed: number;
+  issues: SyncIssue[];
 }
 
 export interface BudgetView {

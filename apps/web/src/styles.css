@@ -116,9 +116,25 @@ a {
   padding: 0;
 }
 
+.ward-list li {
+  display: flex;
+}
+
+/*
+ * The three cards hold different amounts — one ward has a flag the others do
+ * not — so without stretching the whole chain the row comes out ragged. The
+ * grid stretches the item, the item has to stretch the link, and the link has
+ * to stretch the card.
+ */
 .ward-list a {
-  display: block;
+  display: flex;
+  flex: 1;
   text-decoration: none;
+}
+
+.ward-list a > .card {
+  flex: 1;
+  align-content: start;
 }
 
 .ward-list a:hover .card,
@@ -572,4 +588,267 @@ a {
 
 .demo-notice strong {
   color: var(--text);
+}
+
+/* ------------------------------------------------------------------
+ * The way in: the explanatory layer.
+ *
+ * Everything below belongs to the first screen and to the synchronisation
+ * page. The clinical screens stay dense on purpose — the people who read
+ * those already know what a score of 7 means. These two are read by people
+ * who do not, so they get room, a measure that stops at a readable line
+ * length, and words beside every number.
+ * ------------------------------------------------------------------ */
+
+.masthead-nav {
+  display: flex;
+  gap: 16px;
+  margin-top: 8px;
+}
+
+.masthead-nav a {
+  color: var(--text-soft);
+  font-size: 13px;
+  text-decoration: none;
+  padding-bottom: 2px;
+  border-bottom: 2px solid transparent;
+}
+
+.masthead-nav a:hover {
+  color: var(--text);
+}
+
+/* react-router sets this class on the link whose route is showing. */
+.masthead-nav a.active {
+  color: var(--text);
+  border-bottom-color: var(--text);
+}
+
+/*
+ * The opening paragraph. 68 characters is about where a line stops being
+ * comfortable to track back from, and this is the one paragraph on the site
+ * that has to be read rather than scanned.
+ */
+.lede {
+  margin: 0 0 var(--gap);
+  max-width: 68ch;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--text-soft);
+}
+
+.lede strong {
+  color: var(--text);
+}
+
+.section-title {
+  margin: calc(var(--gap) * 1.5) 0 var(--gap);
+  font-size: 15px;
+}
+
+/* ---- Number tiles ---- */
+
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--gap);
+  margin: 0 0 var(--gap);
+  padding: 0;
+}
+
+.tile {
+  min-width: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+}
+
+.tile dd {
+  margin: 0;
+  /* Tabular figures so a column of numbers lines up on the digit. */
+  font-variant-numeric: tabular-nums;
+  font-size: 26px;
+  line-height: 1.1;
+  font-weight: 600;
+}
+
+.tile dt {
+  margin-top: 2px;
+  color: var(--text-soft);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.tile .hint {
+  display: block;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+/*
+ * A tile that is reporting something to act on. The left rule carries it,
+ * not the number's colour: a red figure on a dark surface is the kind of
+ * emphasis that disappears for one reader in twelve.
+ */
+.tile[data-kind='warn'] {
+  border-left: 3px solid var(--risk-high);
+}
+
+.tile[data-kind='quiet'] dd {
+  color: var(--text-soft);
+  font-weight: 500;
+}
+
+.tiles-headline .tile dd {
+  font-size: 30px;
+}
+
+/* ---- Ward cards ---- */
+
+.ward-card {
+  display: grid;
+  gap: 10px;
+}
+
+.ward-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+/*
+ * One bar, one ward. Decorative — it is aria-hidden, and every figure in it
+ * is written out underneath — so it can lean on colour in a way nothing else
+ * in this application is allowed to.
+ */
+.risk-bar {
+  display: flex;
+  height: 8px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--rule);
+}
+
+.risk-slice {
+  height: 100%;
+  min-width: 3px;
+}
+
+.risk-slice[data-risk='high'] {
+  background: var(--risk-high);
+}
+.risk-slice[data-risk='medium'] {
+  background: var(--risk-medium);
+}
+.risk-slice[data-risk='low-medium'] {
+  background: var(--risk-low-medium);
+}
+.risk-slice[data-risk='low'] {
+  background: var(--risk-low);
+}
+.risk-slice[data-risk='unscored'] {
+  background: var(--text-muted);
+}
+
+.ward-bands {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 14px;
+  color: var(--text-soft);
+  font-size: 12px;
+}
+
+.ward-band {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.dot[data-risk='unscored'] {
+  background: var(--text-muted);
+}
+
+/* ---- The legend ---- */
+
+.legend {
+  margin: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.legend-row {
+  display: grid;
+  grid-template-columns: minmax(96px, max-content) 1fr;
+  gap: 4px 14px;
+  align-items: baseline;
+}
+
+.legend-row dt {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.legend-row dd {
+  margin: 0;
+  max-width: 62ch;
+  color: var(--text-soft);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+@media (max-width: 520px) {
+  .legend-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---- The synchronisation page ---- */
+
+.run-latest[data-status='failed'] {
+  border-left: 3px solid var(--risk-high);
+}
+
+.run-latest[data-status='partial'] {
+  border-left: 3px solid var(--risk-low-medium);
+}
+
+.flag[data-kind='run-succeeded'] {
+  border-color: var(--risk-low);
+  color: var(--text-soft);
+}
+
+.flag[data-kind='run-partial'] {
+  border-color: var(--risk-low-medium);
+  color: var(--text-soft);
+}
+
+.flag[data-kind='run-failed'] {
+  background: var(--risk-high);
+  border-color: var(--risk-high);
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.flag[data-kind='run-running'] {
+  border-color: var(--text-muted);
+  color: var(--text-soft);
+}
+
+/* A count of things that went wrong is worth finding without reading. */
+.board td[data-kind='warn'] {
+  color: var(--risk-high);
+  font-weight: 600;
+}
+
+.section h3 .flag {
+  margin-left: 8px;
+  vertical-align: middle;
 }

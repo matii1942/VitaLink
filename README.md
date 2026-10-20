@@ -10,6 +10,12 @@ VitaLink connects a hospital's legacy patient system to modern clinical tooling.
 
 ## What it looks like
 
+The first screen is written for somebody who has never heard of NEWS2, because most of the people who open the demo have not. It says what the system does, gives the numbers that matter across every ward, and explains each band in a sentence before anybody has to read a row.
+
+![The first screen: what the system does, and what the bands mean](docs/images/first-screen.png)
+
+The breakdown on each ward card comes from the server, in the same query that counts the beds. Fetching the three boards and adding them up in the browser would be the N+1 problem wearing a different hat, in a project that has an ADR about not doing it ([ADR 0010](docs/decisions/0010-ward-board-query-measured.md)).
+
 The ward board answers one question at a glance: who needs attention first. The order is not the browser's opinion — it comes from the database, by a ranking that puts a patient waiting for a critical care bed above everyone, then sorts by NEWS2.
 
 ![The ward board, ordered by acuity](docs/images/ward-board.png)
@@ -30,6 +36,12 @@ One admission, in the order a handover is given: the summary first, the trend se
 ![One admission: summary, trend and every round](docs/images/patient-detail.png)
 
 The escalation thresholds on the trend are dashed hairlines labelled with words rather than coloured bands, so they survive greyscale, colour blindness and a black and white printout. Time runs to scale on the horizontal axis, because rounds are taken every four hours until somebody deteriorates and then every hour — spacing them evenly would flatten exactly the acceleration that matters.
+
+And the synchronisation, seen from outside. It runs once an hour, unattended, 8,760 times a year, and until this screen existed the only way to know whether it had worked was to open the database.
+
+![The synchronisation: what ran, what came in, and what was refused](docs/images/synchronisation.png)
+
+Two things on it are the project's own claims, checked against its history rather than asserted. Consecutive runs over unchanged data report the same counts and the ward does not grow — that is idempotence, and it is what makes an hourly job safe to leave alone. And every record the normaliser refused is counted, with its reason kept and shown: a run that rejects nothing says so, and a run that rejects something says what.
 
 The summary card above reads *unavailable* because no API key is configured in this environment. That is the designed behaviour, not a failure: with no model, the endpoint says so and calls nothing. The [live demo](https://matii1942.github.io/VitaLink/) shows the other branch: a written handover for every patient, each one through the real fact sheet, the real budget gate and the real verifier.
 
@@ -249,7 +261,7 @@ cd ../web
 npm test            # the screens, against a stubbed fetch
 ```
 
-**368 tests**: 193 unit and 71 end to end in the API, 63 in the simulator, 41 in
+**408 tests**: 203 unit and 72 end to end in the API, 63 in the simulator, 70 in
 the dashboard.
 
 The end-to-end tests use a second database, `vitalink_test`, on the same
