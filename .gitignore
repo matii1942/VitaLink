@@ -48,6 +48,11 @@ NOTAS-DE-APRENDIZAJE.md
 GUIA-DE-ESTUDIO.md
 DESAFIOS-Y-ERRORES.md
 
+# Donde caen los archivos que Claude manda al chat. Es una bandeja de entrada,
+# no parte del proyecto, y adentro hay notas personales — las mismas que están
+# ignoradas arriba. Un `git add -A` distraído las publicaría.
+Claude outputs/
+
 # --- os ---
 .DS_Store
 Thumbs.db
