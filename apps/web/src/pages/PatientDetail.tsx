@@ -8,17 +8,19 @@
  * written by a language model, and the only reason it is safe to put at the
  * top is that the evidence for it is on the same page.
  */
-import { Link, useParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 
 import { useResource, type Resource } from '../api';
 import { News2Trend } from '../components/News2Trend';
 import { riskLabel, sexInitial, timeAgo } from '../format';
+import { LangLink, useText } from '../i18n/language';
 import type { AdmissionWithPatient, ObservationView, Page, SummaryView } from '../types';
 
 /** Enough rounds for a day or two of trend without asking for the whole stay. */
 const ROUNDS = 40;
 
 export function PatientDetail() {
+  const text = useText();
   const { admissionId = '' } = useParams();
   const id = encodeURIComponent(admissionId);
 
@@ -29,13 +31,13 @@ export function PatientDetail() {
   const summary = useResource<SummaryView>(`/admissions/${id}/summary`);
 
   if (admission.loading) {
-    return <p className="state">Loading…</p>;
+    return <p className="state">{text.wards.loading}</p>;
   }
 
   if (admission.error !== null || admission.data === null) {
     return (
       <p className="state" data-kind="error">
-        Could not load admission {admissionId}: {admission.error?.message ?? 'no data'}
+        {text.patient.couldNotLoad(admissionId, admission.error?.message ?? 'no data')}
       </p>
     );
   }
@@ -45,47 +47,54 @@ export function PatientDetail() {
 
   return (
     <>
-      <Link className="back" to={`/wards/${encodeURIComponent(row.ward)}`}>
+      <LangLink className="back" to={`/wards/${encodeURIComponent(row.ward)}`}>
         ← {row.ward}
-      </Link>
+      </LangLink>
 
       <div className="board-head">
         <h2>
           {row.patient.familyName}, {row.patient.givenName}
         </h2>
         <span className="meta">
-          {row.patient.age} {sexInitial(row.patient.sex)} · {row.patient.mrn} · {row.ward}
+          {row.patient.age} {sexInitial(row.patient.sex, text.sex)} · {row.patient.mrn} ·{' '}
+          {row.ward}
         </span>
       </div>
 
       <dl className="facts">
-        <Fact label="Diagnosis" value={row.diagnosis ?? 'not recorded'} />
-        <Fact label="Admitted" value={`${timeAgo(row.admittedAt)} · ${row.admissionType}`} />
-        <Fact label="From" value={row.sourceUnit ?? 'home'} />
+        {/* Diagnosis, admission type and source unit are data, untranslated. */}
+        <Fact label={text.patient.facts.diagnosis} value={row.diagnosis ?? text.common.notRecorded} />
+        <Fact
+          label={text.patient.facts.admitted}
+          value={`${timeAgo(row.admittedAt, text.time)} · ${row.admissionType}`}
+        />
+        <Fact label={text.patient.facts.from} value={row.sourceUnit ?? text.common.home} />
         <div className="fact">
-          <dt>Status</dt>
+          <dt>{text.patient.facts.status}</dt>
           <dd>
             {row.awaitingCriticalCare && row.criticalCareRequest !== null ? (
               <span className="flag" data-kind="critical-care">
-                awaiting {row.criticalCareRequest.unit} ·{' '}
-                {timeAgo(row.criticalCareRequest.requestedAt)}
+                {text.patient.awaiting(
+                  row.criticalCareRequest.unit,
+                  timeAgo(row.criticalCareRequest.requestedAt, text.time),
+                )}
               </span>
             ) : row.active ? (
-              'in a bed'
+              text.patient.inABed
             ) : (
-              `discharged to ${row.dischargeDestination ?? 'unknown'}`
+              text.patient.dischargedTo(row.dischargeDestination ?? text.common.unknown)
             )}
           </dd>
         </div>
-        <Fact label="Rounds recorded" value={String(row.observationCount)} />
+        <Fact label={text.patient.facts.roundsRecorded} value={String(row.observationCount)} />
       </dl>
 
       <Summary resource={summary} />
 
       <section className="card section">
-        <h3>Trend</h3>
+        <h3>{text.patient.trend}</h3>
         {observations.loading ? (
-          <p className="subtle">Loading observations…</p>
+          <p className="subtle">{text.patient.loadingObservations}</p>
         ) : (
           // The chart wants oldest first; the table below wants newest first.
           // toReversed leaves the original array alone, which matters because
@@ -96,7 +105,7 @@ export function PatientDetail() {
       </section>
 
       <section className="section">
-        <h3>Observations</h3>
+        <h3>{text.patient.observations}</h3>
         <Rounds rounds={rounds} loading={observations.loading} />
       </section>
     </>
@@ -121,13 +130,14 @@ function Fact({ label, value }: { label: string; value: string }) {
  * rests on it never being mistaken for one (ADR 0012).
  */
 function Summary({ resource }: { resource: Resource<SummaryView> }) {
+  const text = useText();
   const { data, loading, error } = resource;
 
   if (loading) {
     return (
       <section className="card section">
-        <h3>Handover summary</h3>
-        <p className="subtle">Writing…</p>
+        <h3>{text.patient.summary.title}</h3>
+        <p className="subtle">{text.patient.summary.writing}</p>
       </section>
     );
   }
@@ -135,8 +145,10 @@ function Summary({ resource }: { resource: Resource<SummaryView> }) {
   if (error !== null || data === null) {
     return (
       <section className="card section">
-        <h3>Handover summary</h3>
-        <p className="subtle">Unavailable: {error?.message ?? 'no answer'}</p>
+        <h3>{text.patient.summary.title}</h3>
+        <p className="subtle">
+          {text.patient.summary.unavailable(error?.message ?? 'no answer')}
+        </p>
       </section>
     );
   }
@@ -144,67 +156,98 @@ function Summary({ resource }: { resource: Resource<SummaryView> }) {
   return (
     <section className="card section summary" data-state={data.state}>
       <h3>
-        Handover summary
+        {text.patient.summary.title}
         <span className="flag" data-kind={data.state}>
           {data.state}
         </span>
       </h3>
 
       {data.text === null ? (
-        <p className="subtle">{data.reason ?? 'Nothing has been written for this admission.'}</p>
+        <p className="subtle">{data.reason ?? text.patient.summary.nothingWritten}</p>
       ) : (
         <>
-          <p className="summary-text">{data.text}</p>
-          {data.reason !== null && <p className="subtle">Not refreshed: {data.reason}</p>}
+          {/*
+            The handover note is written by a language model on the server,
+            from an English prompt, so it arrives in English whatever language
+            this page is in. Marking it says so honestly and keeps a Spanish
+            screen reader from mangling it.
+
+            This is the one piece of prose on the site that a translation
+            cannot reach from here, and the fix is not a client-side one:
+            translating it in the browser would mean a second model pass over
+            clinical text, with a second chance to change what it says. The
+            right fix is for the API to generate in the language asked for —
+            an `Accept-Language` on /summary and a prompt per language, with
+            the verifier run against each. Recorded in ADR 0017.
+          */}
+          <p className="summary-text" lang="en">
+            {data.text}
+          </p>
+          {data.reason !== null && (
+            <p className="subtle">{text.patient.summary.notRefreshed(data.reason)}</p>
+          )}
           <p className="subtle">
-            Covers observations up to{' '}
-            {data.throughRecordedAt === null ? 'an unknown round' : timeAgo(data.throughRecordedAt)}
-            {data.roundsUsed !== null && ` · ${data.roundsUsed} rounds read`}
+            {text.patient.summary.covers(
+              data.throughRecordedAt === null
+                ? text.patient.summary.unknownRound
+                : timeAgo(data.throughRecordedAt, text.time),
+            )}
+            {data.roundsUsed !== null && ` · ${text.patient.summary.roundsRead(data.roundsUsed)}`}
             {data.model !== null && ` · ${data.model}`}
           </p>
         </>
       )}
 
-      <p className="disclaimer">{data.disclaimer}</p>
+      {/*
+        The API's own wording, for the same reason as the board's ordering
+        rule: it states what the summary is and is not, and a client that
+        paraphrased it could soften it. `lang` marks it as English so a
+        Spanish screen reader does not try to pronounce it as Spanish.
+      */}
+      <p className="disclaimer" lang="en">
+        {data.disclaimer}
+      </p>
     </section>
   );
 }
 
 function Rounds({ rounds, loading }: { rounds: ObservationView[]; loading: boolean }) {
+  const text = useText();
+
   if (loading) {
-    return <p className="subtle">Loading observations…</p>;
+    return <p className="subtle">{text.patient.loadingObservations}</p>;
   }
 
   if (rounds.length === 0) {
-    return <p className="subtle">No vital signs have been recorded for this admission.</p>;
+    return <p className="subtle">{text.patient.noVitalSigns}</p>;
   }
 
   return (
     <table className="board">
-      <caption>Most recent first. A dash is a measurement that was not taken.</caption>
+      <caption>{text.patient.roundsCaption}</caption>
       <thead>
         <tr>
-          <th scope="col">When</th>
-          <th scope="col">NEWS2</th>
-          <th scope="col">Resp</th>
-          <th scope="col">SpO2</th>
-          <th scope="col">Support</th>
-          <th scope="col">Systolic</th>
-          <th scope="col">Pulse</th>
-          <th scope="col">Glasgow</th>
-          <th scope="col">Temp</th>
+          <th scope="col">{text.patient.columns.when}</th>
+          <th scope="col">{text.patient.columns.news2}</th>
+          <th scope="col">{text.patient.columns.resp}</th>
+          <th scope="col">{text.patient.columns.spo2}</th>
+          <th scope="col">{text.patient.columns.support}</th>
+          <th scope="col">{text.patient.columns.systolic}</th>
+          <th scope="col">{text.patient.columns.pulse}</th>
+          <th scope="col">{text.patient.columns.glasgow}</th>
+          <th scope="col">{text.patient.columns.temp}</th>
         </tr>
       </thead>
       <tbody>
         {rounds.map((round) => (
           <tr key={round.observationId}>
-            <td className="subtle nowrap">{timeAgo(round.recordedAt)}</td>
+            <td className="subtle nowrap">{timeAgo(round.recordedAt, text.time)}</td>
             <td>
               <div className="score">
                 <span className="aggregate">{round.score?.aggregate ?? '—'}</span>
                 <span className="band">
                   <span className="dot" data-risk={round.score?.risk ?? 'none'} aria-hidden="true" />
-                  {riskLabel(round.score?.risk ?? null, round.score?.status)}
+                  {riskLabel(round.score?.risk ?? null, round.score?.status, text.common)}
                 </span>
               </div>
             </td>

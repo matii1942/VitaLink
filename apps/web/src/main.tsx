@@ -13,6 +13,7 @@ import { BrowserRouter, HashRouter } from 'react-router-dom';
 
 import { App } from './App';
 import { IS_DEMO } from './demo/demo';
+import { LanguageProvider } from './i18n/language';
 import './styles.css';
 
 /**
@@ -32,10 +33,17 @@ if (container === null) {
   throw new Error('index.html has no #root element.');
 }
 
+/*
+ * The provider goes inside the router, not outside it: it reads the language
+ * out of the query string with `useSearchParams`, which is a router hook and
+ * throws without a router above it.
+ */
 createRoot(container).render(
   <StrictMode>
     <Router>
-      <App />
+      <LanguageProvider>
+        <App />
+      </LanguageProvider>
     </Router>
   </StrictMode>,
 );

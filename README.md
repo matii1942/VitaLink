@@ -51,6 +51,14 @@ The accents are the reason that search is a hand-written query. These are Spanis
 
 The summary card above reads *unavailable* because no API key is configured in this environment. That is the designed behaviour, not a failure: with no model, the endpoint says so and calls nothing. The [live demo](https://matii1942.github.io/VitaLink/) shows the other branch: a written handover for every patient, each one through the real fact sheet, the real budget gate and the real verifier.
 
+And all of it in Spanish, for the nurses this is actually for. The switch is in the masthead, and the choice lives in the URL — so the Spanish board is something you can send somebody, rather than something they have to find.
+
+![The first screen in Spanish](docs/images/in-spanish.png)
+
+Translating a clinical interface has a rule, and it is a clinical rule rather than a stylistic one: **standard NEWS2 vocabulary stays in English, and the project's own labels are translated**. `low-medium` stays `low-medium` — it is a Royal College of Physicians term, used untranslated in Spanish-speaking hospitals the way *shock* and *sepsis* are, and "bajo-medio" would be vocabulary nobody says at a handover. `not scored` and `no score` are our wording, so they are translated, and as two different phrases, because a decision not to score and a measurement nobody has taken are not the same state. A test walks both catalogues and fails on any Spanish string left sitting at its English value, unless its key is on a list that says why.
+
+Three paragraphs stay English on the Spanish page and are marked `lang="en"` so a screen reader picks an English voice for them: the ordering rule and the disclaimer, which the API sends in its own words on purpose, and the handover note itself, which is generated on the server from an English prompt. That last one is a real limitation rather than a decision — translating it in the browser would mean a second model pass over clinical text, downstream of the verifier that checks every figure against the record. The fix belongs in the API. Both the rule and the limitation are written down in [ADR 0017](docs/decisions/0017-the-dashboard-is-bilingual-except-where-it-must-not-be.md).
+
 ---
 
 ## The problem
@@ -269,8 +277,8 @@ cd ../web
 npm test            # the screens, against a stubbed fetch
 ```
 
-**441 tests**: 203 unit and 85 end to end in the API, 63 in the simulator, 90 in
-the dashboard.
+**468 tests**: 203 unit and 85 end to end in the API, 63 in the simulator, 117
+in the dashboard.
 
 The end-to-end tests use a second database, `vitalink_test`, on the same
 PostgreSQL container. They create it and apply the migrations on first run, and

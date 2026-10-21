@@ -2,6 +2,7 @@ import { screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { resetFixtures, syncRun } from '../fixtures';
+import { CATALOGUE } from '../i18n/strings';
 import { mockApi, mockApiDown, renderRoute } from '../test-utils';
 import { duration, SyncRuns } from './SyncRuns';
 
@@ -26,11 +27,18 @@ describe('duration', () => {
     [72_000, '1 min 12 s'],
     [3_600_000, '60 min 0 s'],
   ])('writes %i ms as %s', (ms, expected) => {
-    expect(duration(ms)).toBe(expected);
+    expect(duration(ms, CATALOGUE.en.sync)).toBe(expected);
   });
 
   it('says a run with no end is still going', () => {
-    expect(duration(null)).toBe('still running');
+    expect(duration(null, CATALOGUE.en.sync)).toBe('still running');
+  });
+
+  // The units are SI (Système International) symbols and the same in both
+  // languages; only the unfinished-run phrase is a word.
+  it('keeps the units and translates only the words', () => {
+    expect(duration(2784, CATALOGUE.es.sync)).toBe('2.8 s');
+    expect(duration(null, CATALOGUE.es.sync)).toBe('todavía corriendo');
   });
 });
 

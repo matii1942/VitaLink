@@ -16,13 +16,25 @@ import type { ReactNode } from 'react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { vi } from 'vitest';
 
-/** Renders `element` as if the browser were at `at`, matching `pattern`. */
+import { LanguageProvider } from './i18n/language';
+
+/**
+ * Renders `element` as if the browser were at `at`, matching `pattern`.
+ *
+ * The language provider is included because the language is read from the
+ * URL, so `at` can carry `?lang=es` and the screen comes out in Spanish — the
+ * same way it does in the application, rather than through a seam invented
+ * for tests. With no `lang` in the URL it falls back to English in jsdom, so
+ * every test written before this existed goes on reading the same way.
+ */
 export function renderRoute(pattern: string, at: string, element: ReactNode): RenderResult {
   return render(
     <MemoryRouter initialEntries={[at]}>
-      <Routes>
-        <Route path={pattern} element={element} />
-      </Routes>
+      <LanguageProvider>
+        <Routes>
+          <Route path={pattern} element={element} />
+        </Routes>
+      </LanguageProvider>
     </MemoryRouter>,
   );
 }

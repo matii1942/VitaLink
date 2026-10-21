@@ -26,13 +26,20 @@
  */
 import { useId, useState } from 'react';
 
+import { useLocale, useText } from '../i18n/language';
 import type { ObservationView } from '../types';
 
 const WIDTH = 720;
 const HEIGHT = 200;
 const PAD = { top: 14, right: 64, bottom: 26, left: 30 };
 
-/** Where the risk bands begin. Drawn as lines, labelled as words. */
+/**
+ * Where the risk bands begin. Drawn as lines, labelled as words.
+ *
+ * The labels are NEWS2's own band names and stay in English in both
+ * languages, like every other band on this site — see the note at the top of
+ * i18n/strings.tsx.
+ */
 const THRESHOLDS = [
   { at: 5, label: 'medium' },
   { at: 7, label: 'high' },
@@ -44,6 +51,8 @@ export interface News2TrendProps {
 }
 
 export function News2Trend({ observations }: News2TrendProps) {
+  const text = useText();
+  const locale = useLocale();
   const [hovered, setHovered] = useState<number | null>(null);
   const titleId = useId();
 
@@ -61,7 +70,7 @@ export function News2Trend({ observations }: News2TrendProps) {
     .filter((point): point is typeof point & { score: number } => point.score !== null);
 
   if (points.length < 2) {
-    return <p className="subtle">Not enough scored observations to draw a trend.</p>;
+    return <p className="subtle">{text.patient.notEnoughToDraw}</p>;
   }
 
   const first = points[0]!;
@@ -79,9 +88,7 @@ export function News2Trend({ observations }: News2TrendProps) {
 
   return (
     <figure className="chart">
-      <figcaption id={titleId}>
-        NEWS2 across {points.length} scored rounds, oldest on the left
-      </figcaption>
+      <figcaption id={titleId}>{text.patient.trendCaption(points.length)}</figcaption>
 
       <svg
         viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
@@ -146,10 +153,10 @@ export function News2Trend({ observations }: News2TrendProps) {
         ))}
 
         <text className="tick" textAnchor="start" x={PAD.left} y={HEIGHT - 8}>
-          {shortTime(first.recordedAt)}
+          {shortTime(first.recordedAt, locale)}
         </text>
         <text className="tick" x={WIDTH - PAD.right} y={HEIGHT - 8} textAnchor="end">
-          {shortTime(last.recordedAt)}
+          {shortTime(last.recordedAt, locale)}
         </text>
 
         {active !== null && (
@@ -159,10 +166,10 @@ export function News2Trend({ observations }: News2TrendProps) {
           >
             <rect width={150} height={34} rx={4} />
             <text x={8} y={14}>
-              NEWS2 {active.score} · {active.risk ?? 'no band'}
+              NEWS2 {active.score} · {active.risk ?? text.patient.noBand}
             </text>
             <text x={8} y={27} className="tooltip-soft">
-              {shortTime(active.recordedAt)}
+              {shortTime(active.recordedAt, locale)}
             </text>
           </g>
         )}
@@ -171,9 +178,14 @@ export function News2Trend({ observations }: News2TrendProps) {
   );
 }
 
-/** "27 Sep 06:00" — enough to place a round in a shift. */
-function shortTime(iso: string): string {
-  return new Date(iso).toLocaleString(undefined, {
+/**
+ * "27 Sep 06:00" — enough to place a round in a shift.
+ *
+ * The locale is passed in rather than left to the browser: a reader who chose
+ * Spanish gets Spanish month names, even on a machine set to English.
+ */
+function shortTime(iso: string, locale: string): string {
+  return new Date(iso).toLocaleString(locale, {
     day: '2-digit',
     month: 'short',
     hour: '2-digit',

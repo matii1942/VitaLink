@@ -18,9 +18,11 @@
  * the browser. That would be the N+1 problem wearing a different hat, in a
  * project that has an ADR about not doing it.
  */
-import { Link } from 'react-router-dom';
+
 
 import { useResource } from '../api';
+import { LangLink, useText } from '../i18n/language';
+import type { Strings } from '../i18n/strings';
 import type { WardRisk, WardSummary } from '../types';
 
 /**
@@ -32,62 +34,41 @@ import type { WardRisk, WardSummary } from '../types';
  * clinical instruction — this system scores, it does not prescribe.
  */
 const BANDS = [
-  {
-    key: 'high',
-    label: 'high',
-    risk: 'high',
-    of: (risk: WardRisk) => risk.high,
-    meaning: 'A total of 7 or more. The response is immediate and senior.',
-  },
-  {
-    key: 'medium',
-    label: 'medium',
-    risk: 'medium',
-    of: (risk: WardRisk) => risk.medium,
-    meaning: 'A total of 5 or 6. Urgent review, and the rounds get closer together.',
-  },
-  {
-    key: 'lowMedium',
-    label: 'low-medium',
-    risk: 'low-medium',
-    of: (risk: WardRisk) => risk.lowMedium,
-    meaning:
-      'A low total, but one single reading at the extreme. This is the patient who looks stable and is not — the reason the rule exists.',
-  },
-  {
-    key: 'low',
-    label: 'low',
-    risk: 'low',
-    of: (risk: WardRisk) => risk.low,
-    meaning: 'A total of 4 or less, with nothing at the extreme. Routine observation.',
-  },
-  {
-    key: 'unscored',
-    label: 'not scored',
-    risk: null,
-    of: (risk: WardRisk) => risk.unscored,
-    meaning:
-      'Nobody has recorded vital signs yet, or the patient is under sixteen, whom this system does not score. Not an absence of risk — an absence of measurement.',
-  },
+  { key: 'high', label: 'high', risk: 'high', of: (r: WardRisk) => r.high },
+  { key: 'medium', label: 'medium', risk: 'medium', of: (r: WardRisk) => r.medium },
+  { key: 'lowMedium', label: 'low-medium', risk: 'low-medium', of: (r: WardRisk) => r.lowMedium },
+  { key: 'low', label: 'low', risk: 'low', of: (r: WardRisk) => r.low },
+  { key: 'unscored', label: null, risk: null, of: (r: WardRisk) => r.unscored },
 ] as const;
 
+/** The band's name: the four NEWS2 ones as they are, ours translated. */
+function bandLabel(band: (typeof BANDS)[number], text: Strings): string {
+  return band.label ?? text.common.notScored;
+}
+
+/** The sentence explaining the band, in the language showing. */
+function bandMeaning(band: (typeof BANDS)[number], text: Strings): string {
+  return text.wards.meaning[band.key];
+}
+
 export function WardList() {
+  const text = useText();
   const { data, loading, error } = useResource<WardSummary[]>('/wards');
 
   if (loading) {
-    return <p className="state">Loading wards…</p>;
+    return <p className="state">{text.wards.loading}</p>;
   }
 
   if (error !== null) {
     return (
       <p className="state" data-kind="error">
-        The API did not answer: {error.message}. Is it running on port 3000?
+        {text.common.apiDidNotAnswer(error.message)}
       </p>
     );
   }
 
   if (data === null || data.length === 0) {
-    return <p className="state">No wards yet. Run a synchronisation first.</p>;
+    return <p className="state">{text.wards.empty}</p>;
   }
 
   const total = data.reduce(sumRisk, emptyRisk());
@@ -96,36 +77,30 @@ export function WardList() {
 
   return (
     <>
-      <p className="lede">
-        A hospital records a patient&rsquo;s breathing, pulse, blood pressure, temperature and
-        alertness every few hours. VitaLink reads those rounds out of the hospital&rsquo;s own
-        system and turns each one into a single number — <strong>NEWS2</strong>, the national
-        early warning score — so that a patient getting worse is visible now, rather than at
-        the next shift change.
-      </p>
+      <p className="lede">{text.wards.lede}</p>
 
       <dl className="tiles tiles-headline">
-        <Headline label="patients in a bed" value={inBeds} />
+        <Headline label={text.wards.inBeds} value={inBeds} />
         <Headline
-          label="need attention now"
+          label={text.wards.needAttention}
           value={needingAttention}
-          hint="high, medium or a single reading at the extreme"
+          hint={text.wards.needAttentionHint}
           kind={needingAttention > 0 ? 'warn' : undefined}
         />
         <Headline
-          label="waiting for an intensive care bed"
+          label={text.wards.awaitingIcu}
           value={total.awaitingCriticalCare}
-          hint="asked for, not yet given"
+          hint={text.wards.awaitingIcuHint}
           kind={total.awaitingCriticalCare > 0 ? 'warn' : undefined}
         />
         <Headline
-          label="admissions on record"
+          label={text.wards.admissionsOnRecord}
           value={data.reduce((sum, ward) => sum + ward.totalAdmissions, 0)}
-          hint="open and closed"
+          hint={text.wards.admissionsHint}
         />
       </dl>
 
-      <h2 className="section-title">Wards</h2>
+      <h2 className="section-title">{text.wards.title}</h2>
 
       <ul className="ward-list">
         {data.map((ward) => (
@@ -133,12 +108,13 @@ export function WardList() {
           // it, reordering the list makes React rebuild every row instead of
           // moving them.
           <li key={ward.ward}>
-            <Link to={`/wards/${encodeURIComponent(ward.ward)}`}>
+            <LangLink to={`/wards/${encodeURIComponent(ward.ward)}`}>
               <div className="card ward-card">
                 <div className="ward-head">
+                  {/* The ward's code is data, and data is never translated. */}
                   <span className="ward-name">{ward.ward}</span>
                   <span className="ward-counts">
-                    {ward.openAdmissions} in a bed · {ward.totalAdmissions} in total
+                    {text.wards.counts(ward.openAdmissions, ward.totalAdmissions)}
                   </span>
                 </div>
 
@@ -148,44 +124,39 @@ export function WardList() {
                   {BANDS.filter((band) => band.of(ward.risk) > 0).map((band) => (
                     <span className="ward-band" key={band.key}>
                       <span className="dot" data-risk={band.risk ?? 'unscored'} aria-hidden="true" />
-                      {band.of(ward.risk)} {band.label}
+                      {band.of(ward.risk)} {bandLabel(band, text)}
                     </span>
                   ))}
                   {ward.risk.awaitingCriticalCare > 0 && (
                     <span className="flag" data-kind="critical-care">
-                      {ward.risk.awaitingCriticalCare} awaiting intensive care
+                      {text.wards.awaitingIntensiveCare(ward.risk.awaitingCriticalCare)}
                     </span>
                   )}
                 </div>
               </div>
-            </Link>
+            </LangLink>
           </li>
         ))}
       </ul>
 
       <section className="card section">
-        <h3>What the bands mean</h3>
+        <h3>{text.wards.bandsTitle}</h3>
         <dl className="legend">
           {BANDS.map((band) => (
             <div className="legend-row" key={band.key}>
               <dt>
                 <span className="dot" data-risk={band.risk ?? 'unscored'} aria-hidden="true" />
-                {band.label}
+                {bandLabel(band, text)}
               </dt>
-              <dd>{band.meaning}</dd>
+              <dd>{bandMeaning(band, text)}</dd>
             </div>
           ))}
         </dl>
-        <p className="disclaimer">
-          The colour is the third signal and never the only one: every row carries the number
-          and the word as well. Measured against this surface, two of these hues sit closer
-          together than the threshold at which people with full colour vision reliably tell
-          two colours apart — and they are the pair the escalation threshold runs between.
-        </p>
+        <p className="disclaimer">{text.wards.colourNote}</p>
       </section>
 
       <p className="subtle">
-        <Link to="/sync">How the data gets here →</Link>
+        <LangLink to="/sync">{text.wards.howDataGetsHere}</LangLink>
       </p>
     </>
   );
@@ -199,8 +170,10 @@ export function WardList() {
  * and a reader who can gets the shape of the ward in one glance.
  */
 function RiskBar({ risk, of }: { risk: WardRisk; of: number }) {
+  const text = useText();
+
   if (of === 0) {
-    return <p className="subtle">No patients in a bed right now.</p>;
+    return <p className="subtle">{text.wards.noneInABed}</p>;
   }
 
   return (

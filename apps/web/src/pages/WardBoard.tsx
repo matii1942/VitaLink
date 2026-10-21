@@ -18,24 +18,33 @@
  * moment it mattered most.
  */
 import { useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 
 import { useResource } from '../api';
 import { riskLabel, sexInitial, timeAgo } from '../format';
+import { LangLink, useText } from '../i18n/language';
+import type { Strings } from '../i18n/strings';
 import type { WardBoard as WardBoardData, WardBoardRow } from '../types';
 
 /** The filters the counters offer, in the order they are shown. */
 const BANDS = [
-  { key: 'critical-care', label: 'awaiting critical care', risk: null },
+  // The first label is this project's own wording, so it is translated. The
+  // four NEWS2 bands are not. See the note in i18n/strings.tsx.
+  { key: 'critical-care', label: null, risk: null },
   { key: 'high', label: 'high', risk: 'high' },
   { key: 'medium', label: 'medium', risk: 'medium' },
   { key: 'low-medium', label: 'low-medium', risk: 'low-medium' },
   { key: 'low', label: 'low', risk: 'low' },
 ] as const;
 
+function bandLabel(band: (typeof BANDS)[number], text: Strings): string {
+  return band.label ?? text.board.awaitingCriticalCare;
+}
+
 type BandKey = (typeof BANDS)[number]['key'];
 
 export function WardBoard() {
+  const text = useText();
   const { ward = '' } = useParams();
   const { data, loading, error } = useResource<WardBoardData>(
     `/wards/${encodeURIComponent(ward)}/board`,
@@ -73,31 +82,31 @@ export function WardBoard() {
   }, [rows, band, query]);
 
   if (loading) {
-    return <p className="state">Loading the board…</p>;
+    return <p className="state">{text.board.loading}</p>;
   }
 
   if (error !== null) {
     return (
       <p className="state" data-kind="error">
-        Could not load {ward}: {error.message}
+        {text.board.couldNotLoad(ward, error.message)}
       </p>
     );
   }
 
   if (data === null) {
-    return <p className="state">No board for {ward}.</p>;
+    return <p className="state">{text.board.noBoard(ward)}</p>;
   }
 
   return (
     <>
-      <Link className="back" to="/">
-        ← all wards
-      </Link>
+      <LangLink className="back" to="/">
+        {text.board.allWards}
+      </LangLink>
 
       <div className="board-head">
         <h2>{data.ward}</h2>
         <span className="meta">
-          {data.openAdmissions} in a bed · read {timeAgo(data.generatedAt)}
+          {text.board.inABedRead(data.openAdmissions, timeAgo(data.generatedAt, text.time))}
         </span>
       </div>
 
@@ -123,7 +132,7 @@ export function WardBoard() {
                 // far as assistive technology is concerned.
                 aria-hidden="true"
               />
-              {entry.label}
+              {bandLabel(entry, text)}
             </span>
           </button>
         ))}
@@ -131,26 +140,40 @@ export function WardBoard() {
         <input
           className="search"
           type="search"
-          placeholder="Find a patient by name or MRN"
+          placeholder={text.board.searchPlaceholder}
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          aria-label="Find a patient by name or medical record number"
+          aria-label={text.board.searchLabel}
         />
       </div>
 
       <table className="board">
         <caption>
-          {shown.length === rows.length
-            ? `${patients(rows.length)}, ${data.orderedBy}.`
-            : `${shown.length} of ${patients(rows.length)} shown, ${data.orderedBy}.`}
+          {/*
+            The ordering rule arrives from the server, in the server's own
+            words. It is sent precisely so a consumer does not restate it and
+            risk describing something the query does not do, so it is shown
+            untranslated in both languages — see i18n/strings.tsx.
+
+            `lang` says so out loud. Without it a screen reader set to Spanish
+            reads this English sentence with Spanish phonetics, which is worse
+            than leaving it untranslated: it becomes unintelligible rather
+            than merely foreign. The attribute costs nothing and is the only
+            honest way to put one language inside another.
+          */}
+          {text.board.caption(
+            shown.length,
+            rows.length,
+            <span lang="en">{data.orderedBy}</span>,
+          )}
         </caption>
         <thead>
           <tr>
-            <th scope="col">NEWS2</th>
-            <th scope="col">Patient</th>
-            <th scope="col">Diagnosis</th>
-            <th scope="col">Last observed</th>
-            <th scope="col">Flags</th>
+            <th scope="col">{text.board.columns.news2}</th>
+            <th scope="col">{text.board.columns.patient}</th>
+            <th scope="col">{text.board.columns.diagnosis}</th>
+            <th scope="col">{text.board.columns.lastObserved}</th>
+            <th scope="col">{text.board.columns.flags}</th>
           </tr>
         </thead>
         <tbody>
@@ -160,12 +183,13 @@ export function WardBoard() {
         </tbody>
       </table>
 
-      {shown.length === 0 && <p className="state">No patient matches that filter.</p>}
+      {shown.length === 0 && <p className="state">{text.board.noMatch}</p>}
     </>
   );
 }
 
 function Row({ row }: { row: WardBoardRow }) {
+  const text = useText();
   const score = row.latestObservation?.score ?? null;
   const risk = riskOf(row);
 
@@ -176,59 +200,55 @@ function Row({ row }: { row: WardBoardRow }) {
           <span className="aggregate">{score?.aggregate ?? '—'}</span>
           <span className="band">
             <span className="dot" data-risk={risk ?? 'none'} aria-hidden="true" />
-            {riskLabel(score?.risk ?? null, score?.status)}
+            {riskLabel(score?.risk ?? null, score?.status, text.common)}
           </span>
         </div>
       </td>
 
       <td>
-        <Link className="patient-name" to={`/admissions/${encodeURIComponent(row.admissionId)}`}>
+        <LangLink className="patient-name" to={`/admissions/${encodeURIComponent(row.admissionId)}`}>
           {row.patient.familyName}, {row.patient.givenName}
-        </Link>
+        </LangLink>
         <div className="subtle">
-          {row.patient.age} {sexInitial(row.patient.sex)} · {row.patient.mrn}
+          {row.patient.age} {sexInitial(row.patient.sex, text.sex)} · {row.patient.mrn}
         </div>
       </td>
 
-      <td className="subtle">{row.diagnosis ?? 'not recorded'}</td>
+      {/* The diagnosis arrives in Spanish from the hospital. Data is data. */}
+      <td className="subtle">{row.diagnosis ?? text.common.notRecorded}</td>
 
       <td className="subtle nowrap">
         {row.latestObservation === null
-          ? 'never'
-          : timeAgo(row.latestObservation.recordedAt)}
+          ? text.common.never
+          : timeAgo(row.latestObservation.recordedAt, text.time)}
       </td>
 
       <td>
         <div className="flags">
           {row.awaitingCriticalCare && row.criticalCareRequest !== null && (
             <span className="flag" data-kind="critical-care">
-              awaiting {row.criticalCareRequest.unit}
+              {text.board.awaiting(row.criticalCareRequest.unit)}
             </span>
           )}
           {score?.redScore === true && (
             <span className="flag" data-kind="red-score">
-              red score
+              {text.board.redScore}
             </span>
           )}
           {score?.partial === true && (
             <span className="flag" data-kind="partial">
-              lower bound
+              {text.board.lowerBound}
             </span>
           )}
           {score?.scaleSource === 'assumed' && (
             <span className="flag" data-kind="assumed">
-              scale assumed
+              {text.board.scaleAssumed}
             </span>
           )}
         </div>
       </td>
     </tr>
   );
-}
-
-/** "1 patient", "12 patients" — a ward of one is not a rendering bug. */
-function patients(count: number): string {
-  return `${count} ${count === 1 ? 'patient' : 'patients'}`;
 }
 
 function riskOf(row: WardBoardRow): string | null {

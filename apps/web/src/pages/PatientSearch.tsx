@@ -21,10 +21,11 @@
  * other half.
  */
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+
 
 import { useResource } from '../api';
 import { riskLabel, sexInitial, timeAgo } from '../format';
+import { LangLink, useText } from '../i18n/language';
 import type { Page, PatientSearchResult } from '../types';
 
 /**
@@ -37,6 +38,7 @@ const TYPING_PAUSE_MS = 250;
 const PAGE_SIZE = 25;
 
 export function PatientSearch() {
+  const text = useText();
   const [query, setQuery] = useState('');
   const [settled, setSettled] = useState('');
 
@@ -54,23 +56,19 @@ export function PatientSearch() {
   return (
     <>
       <div className="board-head">
-        <h2>Find a patient</h2>
-        <span className="meta">across every ward, admitted or not</span>
+        <h2>{text.search.title}</h2>
+        <span className="meta">{text.search.meta}</span>
       </div>
 
-      <p className="lede">
-        By family name, given name or medical record number. Accents do not have to
-        match — searching <strong>vazquez</strong> finds <strong>VÁZQUEZ</strong>, and the
-        other way round.
-      </p>
+      <p className="lede">{text.search.lede}</p>
 
       <input
         className="search search-wide"
         type="search"
-        placeholder="Name or MRN"
+        placeholder={text.search.placeholder}
         value={query}
         onChange={(event) => setQuery(event.target.value)}
-        aria-label="Search by name or medical record number"
+        aria-label={text.search.label}
         autoFocus
       />
 
@@ -90,10 +88,12 @@ function Results({
   error: Error | null;
   query: string;
 }) {
+  const text = useText();
+
   if (error !== null) {
     return (
       <p className="state" data-kind="error">
-        The search did not answer: {error.message}
+        {text.search.didNotAnswer(error.message)}
       </p>
     );
   }
@@ -102,15 +102,15 @@ function Results({
   // the list on every keystroke makes a search feel broken even when it is
   // fast.
   if (data === null) {
-    return <p className="state">{loading ? 'Searching…' : 'No results.'}</p>;
+    return <p className="state">{loading ? text.search.searching : text.search.noResults}</p>;
   }
 
   if (data.data.length === 0) {
     return (
       <p className="state">
         {query.trim() === ''
-          ? 'No patients on record yet.'
-          : `Nobody matches “${query.trim()}”.`}
+          ? text.search.noResults
+          : text.search.nobodyMatches(query.trim())}
       </p>
     );
   }
@@ -118,16 +118,16 @@ function Results({
   return (
     <table className="board">
       <caption>
-        {found(data.total)}
-        {data.total > data.data.length && `, showing the first ${data.data.length}`}. Ordered
-        by name.
+        {text.search.found(data.total)}
+        {data.total > data.data.length && text.search.showingFirst(data.data.length)}.{' '}
+        {text.search.orderedByName}
       </caption>
       <thead>
         <tr>
-          <th scope="col">Patient</th>
-          <th scope="col">MRN</th>
-          <th scope="col">Where</th>
-          <th scope="col">NEWS2</th>
+          <th scope="col">{text.search.columns.patient}</th>
+          <th scope="col">{text.search.columns.mrn}</th>
+          <th scope="col">{text.search.columns.where}</th>
+          <th scope="col">{text.search.columns.news2}</th>
         </tr>
       </thead>
       <tbody>
@@ -138,7 +138,7 @@ function Results({
                 {patient.familyName}, {patient.givenName}
               </span>
               <span className="patient-meta">
-                {patient.age} {sexInitial(patient.sex)}
+                {patient.age} {sexInitial(patient.sex, text.sex)}
               </span>
             </td>
             <td className="mrn">{patient.mrn}</td>
@@ -162,21 +162,25 @@ function Results({
  * read as missing data about somebody who is in fact at home.
  */
 function Whereabouts({ patient }: { patient: PatientSearchResult }) {
+  const text = useText();
   const { current } = patient;
 
   if (current === null) {
-    return <span className="subtle">not in a bed</span>;
+    return <span className="subtle">{text.search.notInABed}</span>;
   }
 
   return (
     <>
-      <Link className="patient-name" to={`/admissions/${encodeURIComponent(current.admissionId)}`}>
+      <LangLink className="patient-name" to={`/admissions/${encodeURIComponent(current.admissionId)}`}>
+        {/* The ward's code is data. */}
         {current.ward}
-      </Link>
-      <span className="patient-meta">admitted {timeAgo(current.admittedAt)}</span>
+      </LangLink>
+      <span className="patient-meta">
+        {text.search.admitted(timeAgo(current.admittedAt, text.time))}
+      </span>
       {current.awaitingCriticalCare && (
         <span className="flag" data-kind="critical-care">
-          awaiting critical care
+          {text.search.awaitingCriticalCare}
         </span>
       )}
     </>
@@ -185,6 +189,7 @@ function Whereabouts({ patient }: { patient: PatientSearchResult }) {
 
 /** The number, then the word. The dot only agrees with them. */
 function Score({ patient }: { patient: PatientSearchResult }) {
+  const text = useText();
   const { current } = patient;
 
   if (current === null) {
@@ -192,7 +197,7 @@ function Score({ patient }: { patient: PatientSearchResult }) {
   }
 
   if (current.aggregate === null) {
-    return <span className="subtle">not measured</span>;
+    return <span className="subtle">{text.search.notMeasured}</span>;
   }
 
   return (
@@ -200,12 +205,8 @@ function Score({ patient }: { patient: PatientSearchResult }) {
       <span className="aggregate">{current.aggregate}</span>
       <span className="band">
         <span className="dot" data-risk={current.risk ?? 'unscored'} aria-hidden="true" />
-        {riskLabel(current.risk, 'scored')}
+        {riskLabel(current.risk, 'scored', text.common)}
       </span>
     </span>
   );
-}
-
-function found(total: number): string {
-  return `${total} ${total === 1 ? 'patient' : 'patients'} found`;
 }

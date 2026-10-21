@@ -143,6 +143,21 @@ describe('WardBoard', () => {
     expect(screen.getByText('no score')).toBeInTheDocument();
   });
 
+  /*
+   * The ordering rule is the server's own sentence and arrives in English in
+   * both languages, so it is marked as English inside the caption. Without
+   * the mark, a Spanish screen reader pronounces an English sentence with
+   * Spanish phonetics — the words are right and unintelligible.
+   */
+  it('marks the ordering rule as the English sentence it is', async () => {
+    mockApi({ [PATH]: board([boardRow()]) });
+
+    show();
+
+    const rule = await screen.findByText('waiting for a critical care bed, then risk');
+    expect(rule).toHaveAttribute('lang', 'en');
+  });
+
   it('shows an error instead of an empty table when the API fails', async () => {
     mockApiDown();
 

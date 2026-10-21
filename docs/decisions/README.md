@@ -29,6 +29,7 @@ reversed, a new record supersedes it and both stay.
 | [0014](0014-model-prices-are-configuration.md) | Model prices are configuration, and the budget is checked before the call | Accepted |
 | [0015](0015-summary-endpoint-is-a-read-through-cache.md) | The summary is a read-through cache behind a GET, and that GET is open | Accepted |
 | [0016](0016-the-public-demo-is-a-recorded-snapshot.md) | The public demo is a recorded snapshot, not a deployment | Accepted |
+| [0017](0017-the-dashboard-is-bilingual-except-where-it-must-not-be.md) | The dashboard is bilingual, except where it must not be | Accepted |
 
 ## Template
 

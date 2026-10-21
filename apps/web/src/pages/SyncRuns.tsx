@@ -21,30 +21,28 @@
  */
 import { useResource } from '../api';
 import { timeAgo } from '../format';
+import { useText } from '../i18n/language';
+import type { Strings } from '../i18n/strings';
 import type { SyncRunView } from '../types';
 
 export function SyncRuns() {
+  const text = useText();
   const { data, loading, error } = useResource<SyncRunView[]>('/sync/runs');
 
   if (loading) {
-    return <p className="state">Loading the synchronisation history…</p>;
+    return <p className="state">{text.sync.loading}</p>;
   }
 
   if (error !== null) {
     return (
       <p className="state" data-kind="error">
-        Could not load the runs: {error.message}
+        {text.sync.couldNotLoad(error.message)}
       </p>
     );
   }
 
   if (data === null || data.length === 0) {
-    return (
-      <p className="state">
-        No synchronisation has run yet. The hourly schedule has not fired and nobody has
-        started one by hand.
-      </p>
-    );
+    return <p className="state">{text.sync.empty}</p>;
   }
 
   const [latest, ...earlier] = data as [SyncRunView, ...SyncRunView[]];
@@ -52,17 +50,11 @@ export function SyncRuns() {
   return (
     <>
       <div className="board-head">
-        <h2>Synchronisation</h2>
-        <span className="meta">
-          every hour, on its own · {runs(data.length)} kept
-        </span>
+        <h2>{text.sync.title}</h2>
+        <span className="meta">{text.sync.meta(data.length)}</span>
       </div>
 
-      <p className="lede">
-        VitaLink pulls every admission and every set of vital signs from the hospital&rsquo;s
-        system, normalises them, and scores each round. It runs on a schedule and nobody
-        watches it. This is what it has been doing.
-      </p>
+      <p className="lede">{text.sync.lede}</p>
 
       <LatestRun run={latest} />
 
@@ -70,29 +62,29 @@ export function SyncRuns() {
 
       {earlier.length > 0 && (
         <section className="section">
-          <h3>Earlier runs</h3>
+          <h3>{text.sync.earlierRuns}</h3>
           <table className="board">
-            <caption>Newest first. The last {runs(data.length)} the database keeps.</caption>
+            <caption>{text.sync.earlierCaption(data.length)}</caption>
             <thead>
               <tr>
-                <th scope="col">Started</th>
-                <th scope="col">Status</th>
-                <th scope="col">Took</th>
-                <th scope="col">Patients</th>
-                <th scope="col">Admissions</th>
-                <th scope="col">Observations</th>
-                <th scope="col">Rejected</th>
-                <th scope="col">Scored</th>
+                <th scope="col">{text.sync.columns.started}</th>
+                <th scope="col">{text.sync.columns.status}</th>
+                <th scope="col">{text.sync.columns.took}</th>
+                <th scope="col">{text.sync.columns.patients}</th>
+                <th scope="col">{text.sync.columns.admissions}</th>
+                <th scope="col">{text.sync.columns.observations}</th>
+                <th scope="col">{text.sync.columns.rejected}</th>
+                <th scope="col">{text.sync.columns.scored}</th>
               </tr>
             </thead>
             <tbody>
               {data.map((run) => (
                 <tr key={run.id}>
-                  <td>{timeAgo(run.startedAt)}</td>
+                  <td>{timeAgo(run.startedAt, text.time)}</td>
                   <td>
                     <StatusFlag status={run.status} />
                   </td>
-                  <td className="num">{duration(run.durationMs)}</td>
+                  <td className="num">{duration(run.durationMs, text.sync)}</td>
                   <td className="num">{run.patientsSynced}</td>
                   <td className="num">{run.admissionsSynced}</td>
                   <td className="num">{run.observationsSynced}</td>
@@ -114,33 +106,33 @@ export function SyncRuns() {
 
 /** The run that matters most: the one that decides whether the board is current. */
 function LatestRun({ run }: { run: SyncRunView }) {
+  const text = useText();
+
   return (
     <section className="card section run-latest" data-status={run.status}>
       <h3>
-        Last run <StatusFlag status={run.status} />
+        {text.sync.lastRun} <StatusFlag status={run.status} />
       </h3>
 
       <p className="subtle">
-        Started {timeAgo(run.startedAt)}
-        {run.durationMs !== null && ` · took ${duration(run.durationMs)}`}
+        {text.sync.started(timeAgo(run.startedAt, text.time))}
+        {run.durationMs !== null && ` · ${text.sync.took(duration(run.durationMs, text.sync))}`}
       </p>
 
       <dl className="tiles">
-        <Tile label="Patients" value={run.patientsSynced} />
-        <Tile label="Admissions" value={run.admissionsSynced} />
-        <Tile label="Observations" value={run.observationsSynced} />
-        <Tile label="Scored" value={run.scoresComputed} />
+        <Tile label={text.sync.tiles.patients} value={run.patientsSynced} />
+        <Tile label={text.sync.tiles.admissions} value={run.admissionsSynced} />
+        <Tile label={text.sync.tiles.observations} value={run.observationsSynced} />
+        <Tile label={text.sync.tiles.scored} value={run.scoresComputed} />
         <Tile
-          label="Rejected"
+          label={text.sync.tiles.rejected}
           value={run.observationsRejected}
           kind={run.observationsRejected > 0 ? 'warn' : 'quiet'}
         />
       </dl>
 
       <p className="disclaimer">
-        {run.observationsRejected === 0
-          ? 'Every record the hospital sent was readable. Nothing was dropped.'
-          : 'The records below could not be read. They were counted and kept out, not discarded quietly.'}
+        {run.observationsRejected === 0 ? text.sync.nothingDropped : text.sync.somethingDropped}
       </p>
     </section>
   );
@@ -154,6 +146,7 @@ function LatestRun({ run }: { run: SyncRunView }) {
  * upserts are doing their job; if they ever do not, this is where it shows.
  */
 function Idempotence({ runs: history }: { runs: SyncRunView[] }) {
+  const text = useText();
   const finished = history.filter((run) => run.finishedAt !== null);
 
   if (finished.length < 2) {
@@ -168,23 +161,11 @@ function Idempotence({ runs: history }: { runs: SyncRunView[] }) {
 
   return (
     <section className="card section" data-testid="idempotence">
-      <h3>Running it twice</h3>
+      <h3>{text.sync.twiceTitle}</h3>
       <p className="subtle">
-        {same ? (
-          <>
-            The last two runs each took in {newest.observationsSynced} observations over{' '}
-            {newest.admissionsSynced} admissions, and the ward did not grow. The
-            synchronisation upserts on the hospital&rsquo;s own identifiers, so running it
-            again changes nothing — which is what makes an hourly job safe to leave
-            unattended.
-          </>
-        ) : (
-          <>
-            The last two runs took in different amounts — {previous.observationsSynced} then{' '}
-            {newest.observationsSynced} observations. That is expected when new rounds were
-            recorded in between; it would only be a defect if the data had not changed.
-          </>
-        )}
+        {same
+          ? text.sync.twiceSame(newest.observationsSynced, newest.admissionsSynced)
+          : text.sync.twiceDifferent(previous.observationsSynced, newest.observationsSynced)}
       </p>
     </section>
   );
@@ -192,6 +173,8 @@ function Idempotence({ runs: history }: { runs: SyncRunView[] }) {
 
 /** What was refused, and why. Empty is an answer, so it is said out loud. */
 function Rejected({ runs: history }: { runs: SyncRunView[] }) {
+  const text = useText();
+
   const issues = history.flatMap((run) =>
     run.issues.map((issue) => ({ ...issue, runId: run.id, startedAt: run.startedAt })),
   );
@@ -202,18 +185,15 @@ function Rejected({ runs: history }: { runs: SyncRunView[] }) {
 
   return (
     <section className="section">
-      <h3>Records that could not be read</h3>
+      <h3>{text.sync.rejectedTitle}</h3>
       <table className="board">
-        <caption>
-          Across the runs shown. Each one was counted and left out of the record rather than
-          guessed at.
-        </caption>
+        <caption>{text.sync.rejectedCaption}</caption>
         <thead>
           <tr>
-            <th scope="col">When</th>
-            <th scope="col">Record</th>
-            <th scope="col">Field</th>
-            <th scope="col">Reason</th>
+            <th scope="col">{text.sync.rejectedColumns.when}</th>
+            <th scope="col">{text.sync.rejectedColumns.record}</th>
+            <th scope="col">{text.sync.rejectedColumns.field}</th>
+            <th scope="col">{text.sync.rejectedColumns.reason}</th>
           </tr>
         </thead>
         <tbody>
@@ -221,9 +201,10 @@ function Rejected({ runs: history }: { runs: SyncRunView[] }) {
             // The record identifier repeats across runs — the same bad row is
             // refused every hour — so the key pairs it with the run.
             <tr key={`${issue.runId}-${issue.record}-${index}`}>
-              <td>{timeAgo(issue.startedAt)}</td>
+              <td>{timeAgo(issue.startedAt, text.time)}</td>
               <td>{issue.record}</td>
               <td>{issue.field ?? '—'}</td>
+              {/* The reason comes from the normaliser, in its own words. */}
               <td>{issue.reason}</td>
             </tr>
           ))}
@@ -256,6 +237,9 @@ function Tile({
 /**
  * The status as a word, never as a colour alone — the same rule the ward
  * board follows, for the same reason.
+ *
+ * The word itself comes from the database, where the run recorded it. It is
+ * data, so it is not translated.
  */
 function StatusFlag({ status }: { status: string }) {
   return (
@@ -265,10 +249,16 @@ function StatusFlag({ status }: { status: string }) {
   );
 }
 
-/** Milliseconds as something a person reads: "2.8 s", "1 min 12 s". */
-export function duration(ms: number | null): string {
+/**
+ * Milliseconds as something a person reads: "2.8 s", "1 min 12 s".
+ *
+ * `ms`, `s` and `min` are the SI (Système International) symbols, which are
+ * the same in both languages — the only word here that needs translating is
+ * the one for a run that has not finished.
+ */
+export function duration(ms: number | null, words: Strings['sync']): string {
   if (ms === null) {
-    return 'still running';
+    return words.stillRunning;
   }
 
   if (ms < 1000) {
@@ -283,8 +273,4 @@ export function duration(ms: number | null): string {
 
   const minutes = Math.floor(seconds / 60);
   return `${minutes} min ${Math.round(seconds - minutes * 60)} s`;
-}
-
-function runs(count: number): string {
-  return `${count} ${count === 1 ? 'run' : 'runs'}`;
 }

@@ -171,3 +171,57 @@ describe('PatientDetail', () => {
     expect(await screen.findByText('not scored')).toBeInTheDocument();
   });
 });
+
+/**
+ * The screen in Spanish, and the two paragraphs on it that stay in English.
+ *
+ * The language is read out of the URL, so these render the same component at
+ * the same route with `?lang=es` on it — no separate wiring, which is the
+ * point: if the provider stopped reading the URL these would fail.
+ */
+describe('the patient detail in Spanish', () => {
+  function showInSpanish() {
+    return renderRoute(
+      '/admissions/:admissionId',
+      `/admissions/${ID}?lang=es`,
+      <PatientDetail />,
+    );
+  }
+
+  it('translates the screen the reader wrote', async () => {
+    mockApi(page());
+
+    showInSpanish();
+
+    expect(await screen.findByText('Pase de guardia')).toBeInTheDocument();
+    expect(screen.getByText('Tendencia')).toBeInTheDocument();
+    expect(screen.getByText('Observaciones')).toBeInTheDocument();
+  });
+
+  /*
+   * The handover note is generated on the server from an English prompt, so
+   * it arrives in English whatever the page is in. Marking it `lang="en"` is
+   * what keeps a Spanish screen reader from pronouncing English words with
+   * Spanish phonetics. The day the API generates in Spanish, this test is the
+   * one that says the mark has to come off.
+   */
+  it('admits that the generated note and the disclaimer are still English', async () => {
+    mockApi(page());
+
+    showInSpanish();
+
+    expect(await screen.findByText('The patient is stable on room air.')).toHaveAttribute(
+      'lang',
+      'en',
+    );
+    expect(screen.getByText(/Derived text, not a clinical record/)).toHaveAttribute('lang', 'en');
+  });
+
+  it('spells the chart caption and its dates in Spanish', async () => {
+    mockApi(page());
+
+    showInSpanish();
+
+    expect(await screen.findByText(/rondas puntuadas, la más vieja a la izquierda/)).toBeInTheDocument();
+  });
+});
